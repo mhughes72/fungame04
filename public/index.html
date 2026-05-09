@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Jeopardy!</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <h1>AI JEOPARDY!</h1>
+  </header>
+
+  <div id="scoreboard"></div>
+
+  <main>
+    <div id="board"></div>
+  </main>
+
+  <div id="loading-screen">
+    <div id="loading-inner">
+      <div class="spinner"></div>
+      <p>Generating board…</p>
+    </div>
+  </div>
+
+  <!-- Clue Modal -->
+  <div id="overlay" class="hidden"></div>
+  <div id="modal" class="hidden" role="dialog" aria-modal="true">
+    <div id="modal-inner">
+
+      <!-- Phase 1: Clue + buzz button -->
+      <div id="phase-clue">
+        <p id="category-label"></p>
+        <div id="clue-text"></div>
+        <div id="buzz-timer-track"><div id="buzz-timer-bar"></div></div>
+        <button id="buzz-btn" class="locked">BUZZ IN</button>
+      </div>
+
+      <!-- Phase 2: Listening + countdown -->
+      <div id="phase-listen" class="hidden">
+        <div class="mic-icon">🎤</div>
+        <div id="listening-label">Listening…</div>
+        <div id="countdown-ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="bg" cx="50" cy="50" r="44"/>
+            <circle id="ring-progress" class="fg" cx="50" cy="50" r="44"/>
+          </svg>
+          <span id="countdown-num">5</span>
+        </div>
+        <div id="transcript-display"></div>
+      </div>
+
+      <!-- Phase Clarify: needs more specific answer -->
+      <div id="phase-clarify" class="hidden">
+        <div id="clarify-header">Be more specific.</div>
+        <div id="clarify-original"></div>
+        <div class="mic-icon">🎤</div>
+        <div id="clarify-countdown-ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="bg" cx="50" cy="50" r="44"/>
+            <circle id="clarify-ring-progress" class="fg" cx="50" cy="50" r="44"/>
+          </svg>
+          <span id="clarify-countdown-num">4</span>
+        </div>
+        <div id="clarify-transcript-display"></div>
+      </div>
+
+      <!-- Phase AI: AI buzzed in -->
+      <div id="phase-ai" class="hidden">
+        <div id="ai-buzz-name"></div>
+        <div id="ai-buzz-status"></div>
+        <div id="ai-answer-reveal" class="hidden"></div>
+      </div>
+
+      <!-- Phase 3: Judging spinner -->
+      <div id="phase-judging" class="hidden">
+        <div class="spinner"></div>
+        <p>Judging…</p>
+      </div>
+
+      <!-- Phase 4: Result -->
+      <div id="phase-result" class="hidden">
+        <div id="result-badge"></div>
+        <div id="result-message"></div>
+        <div id="correct-answer-reveal"></div>
+        <button id="continue-btn">Continue</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+[
+  {
+    "name":    "You",
+    "isHuman": true
+  },
+  {
+    "name":     "HAL 9000",
+    "isHuman":  false,
+    "avatar":   "🤖",
+    "strategy": "highValue",
+    "knowledge":"all",
+    "speed":    "fast",
+    "accuracy": 0.90
+  },
+  {
+    "name":     "Deep Blue",
+    "isHuman":  false,
+    "avatar":   "♟️",
+    "strategy": "sweepCategory",
+    "knowledge":"all",
+    "speed":    "medium",
+    "accuracy": 0.75
+  }
+]
