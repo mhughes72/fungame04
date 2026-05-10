@@ -755,6 +755,103 @@ async function runWrongAnswerIsolationTest() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// 16. FACTUAL ACCURACY  (independent GPT fact-check of generated clues)
+// ══════════════════════════════════════════════════════════════════
+
+async function runFactualAccuracyTests() {
+  section('16. FACTUAL ACCURACY  (independent fact-check of generated clues)');
+  const suggestions = [];
+
+  let cats;
+  try { cats = await get('/api/categories'); } catch { return { suggestions }; }
+
+  // Use two different categories to get a broader sample
+  const picks = [cats.categories[0], cats.categories[3] ?? cats.categories[1]].filter(Boolean);
+  let totalClues = 0, totalErrors = 0;
+
+  for (const cat of picks) {
+    const name = typeof cat === 'object' ? cat.name : cat;
+    console.log(`\n  Category: ${B(name)}`);
+
+    let data;
+    try { data = await post('/api/category', { name }); } catch { console.log(warn('  Request failed')); continue; }
+    if (!data.clues?.length) continue;
+
+    for (const clue of data.clues) {
+      totalClues++;
+      let result;
+      try {
+        result = await gptRate(
+          `You are an independent fact-checker. Verify every factual claim in this Jeopardy clue: nationalities, dates, statistics, record counts, event descriptions, and attributions. Do NOT rely on what sounds plausible — only confirm things you are confident are true. If you find any factual error, describe it briefly. Return JSON: { "accurate": true|false, "error": string|null }`,
+          `Clue: ${clue.clue}\nAnswer: ${clue.answer}`,
+        );
+      } catch { result = null; }
+
+      const ok = result?.accurate !== false;
+      if (ok) {
+        console.log(pass(`  $${clue.value}: ${clue.clue.slice(0, 70)}${clue.clue.length > 70 ? '…' : ''}`));
+      } else {
+        totalErrors++;
+        console.log(fail(`  $${clue.value}: ${clue.clue.slice(0, 70)}${clue.clue.length > 70 ? '…' : ''}`));
+        if (result?.error) console.log(`    ${Y('Error: ' + result.error)}`);
+        suggestions.push(`Factual error in "${name}" $${clue.value}: ${result?.error ?? 'unknown'}`);
+      }
+    }
+  }
+
+  console.log(`\n  Result: ${totalClues - totalErrors}/${totalClues} clues passed fact-check`);
+  return { passed: totalClues - totalErrors, total: totalClues, errors: totalErrors, suggestions };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 17. CLUE-ANSWER LOGICAL FIT  (does the clue actually lead to the answer?)
+// ══════════════════════════════════════════════════════════════════
+
+async function runLogicalFitTests() {
+  section('17. CLUE-ANSWER LOGICAL FIT  (does the clue lead to the answer?)');
+  const suggestions = [];
+
+  let cats;
+  try { cats = await get('/api/categories'); } catch { return { suggestions }; }
+
+  const picks = [cats.categories[1], cats.categories[4] ?? cats.categories[0]].filter(Boolean);
+  let totalClues = 0, totalMismatches = 0;
+
+  for (const cat of picks) {
+    const name = typeof cat === 'object' ? cat.name : cat;
+    console.log(`\n  Category: ${B(name)}`);
+
+    let data;
+    try { data = await post('/api/category', { name }); } catch { console.log(warn('  Request failed')); continue; }
+    if (!data.clues?.length) continue;
+
+    for (const clue of data.clues) {
+      totalClues++;
+      let result;
+      try {
+        result = await gptRate(
+          `You are checking whether a Jeopardy clue logically leads to its stated answer. Ignore whether the facts are true — only judge whether a knowledgeable player reading the clue would arrive at the given answer as the intended response. Flag it if the clue describes something different from the answer, or if the answer does not follow logically from the clue's description. Return JSON: { "fits": true|false, "reason": string|null }`,
+          `Clue: ${clue.clue}\nAnswer: ${clue.answer}`,
+        );
+      } catch { result = null; }
+
+      const ok = result?.fits !== false;
+      if (ok) {
+        console.log(pass(`  $${clue.value}: ${clue.clue.slice(0, 70)}${clue.clue.length > 70 ? '…' : ''}`));
+      } else {
+        totalMismatches++;
+        console.log(fail(`  $${clue.value}: ${clue.clue.slice(0, 70)}${clue.clue.length > 70 ? '…' : ''}`));
+        if (result?.reason) console.log(`    ${Y('Mismatch: ' + result.reason)}`);
+        suggestions.push(`Clue-answer mismatch in "${name}" $${clue.value}: ${result?.reason ?? 'unknown'}`);
+      }
+    }
+  }
+
+  console.log(`\n  Result: ${totalClues - totalMismatches}/${totalClues} clues logically fit their answer`);
+  return { passed: totalClues - totalMismatches, total: totalClues, mismatches: totalMismatches, suggestions };
+}
+
+// ══════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════
 
@@ -786,11 +883,13 @@ async function main() {
   const domainRes   = await runDomainTests();
   const latencyRes  = await runLatencyTests();
   const boardRes    = await runBoardUniquenessTest();
-  const phrasingRes = await runPhrasingTests();
+  const phrasingRes  = await runPhrasingTests();
   const isolationRes = await runWrongAnswerIsolationTest();
+  const factualRes   = await runFactualAccuracyTests();
+  const logicalRes   = await runLogicalFitTests();
 
   // ── Suggestions ──
-  const allResults = [judgeRes, consistRes, clarifyRes, clueRes, diffRes, coherRes, varietyRes, calibRes, specRes, plausRes, domainRes, latencyRes, boardRes, phrasingRes, isolationRes];
+  const allResults = [judgeRes, consistRes, clarifyRes, clueRes, diffRes, coherRes, varietyRes, calibRes, specRes, plausRes, domainRes, latencyRes, boardRes, phrasingRes, isolationRes, factualRes, logicalRes];
   const allSuggestions    = allResults.flatMap(r => r?.suggestions ?? []);
   const uniqueSuggestions = [...new Set(allSuggestions)];
 
@@ -817,6 +916,8 @@ async function main() {
   console.log(`  Accuracy delta     : ${Math.round((calibRes.delta ?? 0) * 100)}pp  (90% vs 20% AI)`);
   console.log(`  Specialty delta    : ${Math.round((specRes.delta ?? 0) * 100)}pp  (high vs low multiplier)`);
   console.log(`  Wrong ans isolaton : ${isolationRes.totalRepeats ?? '?'} repeat(s) across 8 sequential answers`);
+  console.log(`  Factual accuracy   : ${factualRes.passed ?? '?'}/${factualRes.total ?? '?'} clues passed fact-check`);
+  console.log(`  Logical fit        : ${logicalRes.passed ?? '?'}/${logicalRes.total ?? '?'} clues logically lead to answer`);
   console.log(`  Board diversity    : ${domainRes.diversity ?? '?'} unique domains`);
   console.log(`  Latency (judge)    : ${lat['/api/judge'] ?? '?'}ms`);
   console.log(`  Latency (category) : ${lat['/api/category'] ?? '?'}ms`);
@@ -845,6 +946,8 @@ async function main() {
       accuracyDeltaPP:    Math.round((calibRes.delta ?? 0) * 100),
       specialtyDeltaPP:   Math.round((specRes.delta ?? 0) * 100),
       wrongAnsRepeats:    isolationRes.totalRepeats,
+      factualAccuracy:    { passed: factualRes.passed,  total: factualRes.total,  errors: factualRes.errors },
+      logicalFit:         { passed: logicalRes.passed, total: logicalRes.total, mismatches: logicalRes.mismatches },
       boardDiversity:     domainRes.diversity,
       latencyMs:          lat,
     },
@@ -854,7 +957,7 @@ async function main() {
       clueQuality: clueRes, difficulty: diffRes, coherence: coherRes,
       variety: varietyRes, calibration: calibRes, specialty: specRes,
       plausibility: plausRes, domain: domainRes, latency: latencyRes,
-      boardUniqueness: boardRes, phrasing: phrasingRes, isolation: isolationRes,
+      boardUniqueness: boardRes, phrasing: phrasingRes, isolation: isolationRes, factual: factualRes, logical: logicalRes,
     },
   };
 

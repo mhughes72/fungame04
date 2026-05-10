@@ -913,6 +913,10 @@ function pickTile(strategy) {
 function showBreakdown() {
   const el = document.getElementById('game-over');
 
+  // Record all answers from this game to avoid repetition in future games
+  const answers = board.flatMap(col => col.map(cell => cell.answer)).filter(Boolean);
+  if (answers.length) fetch('/api/record-answers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers }) });
+
   const winner     = scores.indexOf(Math.max(...scores));
   const totalClues = CATEGORIES.length * VALUES.length;
 

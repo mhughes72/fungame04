@@ -32,6 +32,12 @@ node server.js --players "The Professor,ARIA,Deep Blue"
 
 Names are case-sensitive and must match exactly what's in `public/players.json`. The human player is always included automatically.
 
+You can also set a `PLAYERS` environment variable instead of the CLI flag — useful for hosted deployments (e.g. Railway):
+
+```
+PLAYERS="HAL 9000,Deep Blue" node server.js
+```
+
 ## Gameplay
 
 - The board controller selects a tile. AIs select automatically based on their strategy.
@@ -88,6 +94,33 @@ After the last tile is answered (or via the Cheat menu), a breakdown screen show
 A **Cheat** button in the top-right header opens a menu with developer shortcuts:
 
 - **End Game Now** — immediately triggers the post-game breakdown with current scores
+
+## Clue Quality
+
+Several mechanisms run at generation time to keep clues accurate and fair:
+
+- **Answer leak detection** — clues are scanned to ensure no word from the answer appears in the clue text. Any leaking clue is individually rewritten (up to 3 passes) rather than regenerating the whole category.
+- **Fact-checking** — each clue is independently fact-checked by a second model pass (nationalities, dates, record counts, attributions). Errors are corrected before the clue reaches the board.
+- **Answer deduplication** — answers are tracked across games in `used-answers.json`. Recently seen answers are excluded from future generations to prevent repetition.
+
+## Eval Suite
+
+Run `node eval.js` (with the server running) to execute the full quality test suite. It covers:
+
+- Judge accuracy & consistency
+- Clarification round-trips
+- Clue leak detection
+- Difficulty spread & inversions
+- Category coherence
+- AI accuracy calibration & specialty effectiveness
+- Wrong answer plausibility & isolation
+- Board answer uniqueness & domain diversity
+- Clue phrasing validation
+- Factual accuracy (independent fact-check)
+- Clue-answer logical fit
+- API latency
+
+Results are exported to a timestamped `eval-results-*.json` file.
 
 ## Tech Stack
 
