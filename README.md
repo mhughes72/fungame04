@@ -1,6 +1,6 @@
 # AI Jeopardy!
 
-A multiplayer Jeopardy game where you compete against AI contestants. Categories and clues are generated fresh each game by GPT-4o-mini. You answer by speaking — the game listens and judges your response.
+A multiplayer Jeopardy game where you compete against AI contestants. Categories and clues are generated fresh each game by GPT-4o. You answer by speaking — the game listens and judges your response.
 
 ## Setup
 
@@ -102,9 +102,10 @@ A **Cheat** button in the top-right header opens a menu with developer shortcuts
 
 Several mechanisms run at generation time to keep clues accurate and fair:
 
-- **Answer leak detection** — clues are scanned to ensure no word from the answer appears in the clue text. Any leaking clue is individually rewritten (up to 3 passes) rather than regenerating the whole category.
-- **Fact-checking** — each clue is independently fact-checked by a second model pass (nationalities, dates, record counts, attributions). Errors are corrected before the clue reaches the board.
+- **Answer leak detection** — clues are scanned to ensure no word from the answer appears in the clue text. Any leaking clue is individually rewritten (up to 5 passes) rather than regenerating the whole category.
+- **Fact-checking** — each clue is independently fact-checked by a second GPT-4o pass. Claims that wouldn't appear in a mainstream encyclopedia are rewritten before the clue reaches the board.
 - **Answer deduplication** — answers are tracked across games in `used-answers.json`. Recently seen answers are excluded from future generations to prevent repetition.
+- **Category deduplication** — category themes are tracked in `used-categories.json` and excluded from future games to prevent thematic repetition.
 
 ## Eval Suite
 
@@ -121,6 +122,9 @@ Run `node eval.js` (with the server running) to execute the full quality test su
 - Clue phrasing validation
 - Factual accuracy (independent fact-check)
 - Clue-answer logical fit
+- Difficulty absolute calibration ($200 vs $1000)
+- Answer normalisation unit tests
+- Category repetition across back-to-back games
 - API latency
 
 Results are exported to a timestamped `eval-results-*.json` file.
@@ -128,6 +132,6 @@ Results are exported to a timestamped `eval-results-*.json` file.
 ## Tech Stack
 
 - **Backend**: Node.js + Express
-- **AI**: OpenAI GPT-4o-mini (category generation, clue writing, AI answers, judging)
+- **AI**: OpenAI GPT-4o (category generation, clue writing, fact-checking), GPT-4o-mini (AI player answers, judging)
 - **Speech**: Web Speech API (Chrome only)
 - **Frontend**: Vanilla JS, no framework
