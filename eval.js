@@ -60,20 +60,26 @@ function messageLeaksAnswer(message, answer) {
 
 const JUDGE_CASES = [
   // Correct
-  { desc: 'exact match',                        clue: 'This 16th U.S. president led the Union through the Civil War.',              correctAnswer: 'Abraham Lincoln',      playerAnswer: 'Abraham Lincoln',            expectCorrect: true,  expectClarify: false },
-  { desc: 'nickname (FDR)',                      clue: 'This president served four terms and enacted the New Deal.',                 correctAnswer: 'Franklin D. Roosevelt', playerAnswer: 'FDR',                        expectCorrect: true,  expectClarify: false },
-  { desc: '"What is" preamble ignored',          clue: 'This president served four terms and enacted the New Deal.',                 correctAnswer: 'Franklin D. Roosevelt', playerAnswer: 'What is Franklin Roosevelt', expectCorrect: true,  expectClarify: false },
-  { desc: 'surname alone (unambiguous)',          clue: 'This physicist developed the theory of general relativity.',                correctAnswer: 'Albert Einstein',       playerAnswer: 'Einstein',                   expectCorrect: true,  expectClarify: false },
-  { desc: 'minor spelling variant (Ghandi)',      clue: 'This independence leader used non-violent civil disobedience in India.',    correctAnswer: 'Mahatma Gandhi',        playerAnswer: 'Ghandi',                     expectCorrect: true,  expectClarify: false },
-  { desc: 'phonetic mishearing (Lenin → Lennon)', clue: 'This Beatle wrote Imagine and was shot outside his New York home in 1980.', correctAnswer: 'John Lennon',          playerAnswer: 'Lenin',                      expectCorrect: true,  expectClarify: false },
-  { desc: 'self-correction accepted',             clue: 'This 1990 holiday film features a boy left behind while his family travels to Paris.', correctAnswer: 'Home Alone', playerAnswer: 'Star Wars... no Home Alone', expectCorrect: true,  expectClarify: false },
-  { desc: 'article dropped (The Beatles)',        clue: 'This British band released Abbey Road in 1969.',                           correctAnswer: 'The Beatles',           playerAnswer: 'Beatles',                    expectCorrect: true,  expectClarify: false },
-  { desc: 'demonym form (Egyptian)',              clue: 'This ancient civilisation built the pyramids at Giza.',                    correctAnswer: 'Ancient Egypt',         playerAnswer: 'Egyptian',                   expectCorrect: true,  expectClarify: false },
+  { desc: 'exact match',                         clue: 'This 16th U.S. president led the Union through the Civil War.',              correctAnswer: 'Abraham Lincoln',       playerAnswer: 'Abraham Lincoln',            expectCorrect: true,  expectClarify: false },
+  { desc: 'nickname (FDR)',                       clue: 'This president served four terms and enacted the New Deal.',                 correctAnswer: 'Franklin D. Roosevelt', playerAnswer: 'FDR',                        expectCorrect: true,  expectClarify: false },
+  { desc: '"What is" preamble ignored',           clue: 'This president served four terms and enacted the New Deal.',                 correctAnswer: 'Franklin D. Roosevelt', playerAnswer: 'What is Franklin Roosevelt', expectCorrect: true,  expectClarify: false },
+  { desc: 'surname alone (unambiguous)',           clue: 'This physicist developed the theory of general relativity.',                correctAnswer: 'Albert Einstein',       playerAnswer: 'Einstein',                   expectCorrect: true,  expectClarify: false },
+  { desc: 'minor spelling variant (Ghandi)',       clue: 'This independence leader used non-violent civil disobedience in India.',    correctAnswer: 'Mahatma Gandhi',        playerAnswer: 'Ghandi',                     expectCorrect: true,  expectClarify: false },
+  { desc: 'phonetic mishearing (Lenin → Lennon)',  clue: 'This Beatle wrote Imagine and was shot outside his New York home in 1980.', correctAnswer: 'John Lennon',           playerAnswer: 'Lenin',                      expectCorrect: true,  expectClarify: false },
+  { desc: 'self-correction accepted',              clue: 'This 1990 holiday film features a boy left behind while his family travels to Paris.', correctAnswer: 'Home Alone', playerAnswer: 'Star Wars... no Home Alone', expectCorrect: true,  expectClarify: false },
+  { desc: 'article dropped (The Beatles)',         clue: 'This British band released Abbey Road in 1969.',                           correctAnswer: 'The Beatles',           playerAnswer: 'Beatles',                    expectCorrect: true,  expectClarify: false },
+  { desc: 'demonym form (Egyptian)',               clue: 'This ancient civilisation built the pyramids at Giza.',                    correctAnswer: 'Ancient Egypt',         playerAnswer: 'Egyptian',                   expectCorrect: true,  expectClarify: false },
+  { desc: 'numeric variant (World War 2 → II)',    clue: 'This global conflict from 1939 to 1945 ended with the defeat of Nazi Germany and Imperial Japan.', correctAnswer: 'World War II', playerAnswer: 'World War 2', expectCorrect: true,  expectClarify: false },
+  { desc: 'number spelled out (1984)',             clue: 'This George Orwell novel depicts a dystopian society ruled by a figure known as Big Brother.', correctAnswer: 'Nineteen Eighty-Four', playerAnswer: '1984', expectCorrect: true,  expectClarify: false },
+  { desc: 'plural accepted (Black Holes)',         clue: 'These regions of space have gravity so strong that not even light can escape their pull.', correctAnswer: 'Black Holes', playerAnswer: 'Black Hole',               expectCorrect: true,  expectClarify: false },
+  // Clarification needed
+  { desc: 'ambiguous surname triggers clarify',    clue: 'This U.S. president led the famous Rough Riders cavalry regiment during the Spanish-American War.', correctAnswer: 'Theodore Roosevelt', playerAnswer: 'Roosevelt', expectCorrect: false, expectClarify: true  },
   // Incorrect
-  { desc: 'wrong first name rejected',            clue: 'This president served four terms and enacted the New Deal.',               correctAnswer: 'Franklin D. Roosevelt', playerAnswer: 'Teddy Roosevelt',            expectCorrect: false, expectClarify: false },
-  { desc: 'completely wrong answer',              clue: 'This physicist developed the theory of general relativity.',               correctAnswer: 'Albert Einstein',       playerAnswer: 'Isaac Newton',               expectCorrect: false, expectClarify: false },
-  { desc: 'empty answer rejected',                clue: 'This 16th U.S. president led the Union through the Civil War.',            correctAnswer: 'Abraham Lincoln',       playerAnswer: '',                           expectCorrect: false, expectClarify: false },
-  { desc: 'non-answer rejected',                  clue: 'This 16th U.S. president led the Union through the Civil War.',            correctAnswer: 'Abraham Lincoln',       playerAnswer: "I don't know",               expectCorrect: false, expectClarify: false },
+  { desc: 'wrong first name rejected',             clue: 'This president served four terms and enacted the New Deal.',               correctAnswer: 'Franklin D. Roosevelt', playerAnswer: 'Teddy Roosevelt',            expectCorrect: false, expectClarify: false },
+  { desc: 'partial answer rejected (World War)',   clue: 'This global conflict from 1939 to 1945 ended with the defeat of Nazi Germany and Imperial Japan.', correctAnswer: 'World War II', playerAnswer: 'World War',  expectCorrect: false, expectClarify: false },
+  { desc: 'completely wrong answer',               clue: 'This physicist developed the theory of general relativity.',               correctAnswer: 'Albert Einstein',       playerAnswer: 'Isaac Newton',               expectCorrect: false, expectClarify: false },
+  { desc: 'empty answer rejected',                 clue: 'This 16th U.S. president led the Union through the Civil War.',            correctAnswer: 'Abraham Lincoln',       playerAnswer: '',                           expectCorrect: false, expectClarify: false },
+  { desc: 'non-answer rejected',                   clue: 'This 16th U.S. president led the Union through the Civil War.',            correctAnswer: 'Abraham Lincoln',       playerAnswer: "I don't know",               expectCorrect: false, expectClarify: false },
 ];
 
 async function runJudgeTests() {
@@ -853,6 +859,102 @@ async function runLogicalFitTests() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// 18. ANSWER NORMALISATION  (unit tests for normaliseAnswer())
+// ══════════════════════════════════════════════════════════════════
+
+function normaliseAnswer(answer) {
+  return answer
+    .replace(/\(.*?\)/g, '')
+    .replace(/[^a-zA-Z0-9\s'-]/g, '')
+    .trim()
+    .replace(/^(the|a|an)\s+/i, '')
+    .split(/\s+/).slice(0, 3).join(' ');
+}
+
+const NORMALISE_CASES = [
+  { input: 'The Enlightenment (also: Age of Reason)', expected: 'Enlightenment',          desc: 'strip article + parenthetical' },
+  { input: 'Franklin Delano Roosevelt',               expected: 'Franklin Delano Roosevelt', desc: 'keep first 3 words exactly' },
+  { input: 'Muhammad Ali',                            expected: 'Muhammad Ali',            desc: '2 words unchanged' },
+  { input: 'The Silk Road',                           expected: 'Silk Road',               desc: 'strip leading "The"' },
+  { input: 'An Inconvenient Truth (2006)',            expected: 'Inconvenient Truth',       desc: 'strip "An" + parenthetical' },
+  { input: 'A Tale of Two Cities',                    expected: 'Tale of Two',              desc: 'strip "A", truncate to 3 words' },
+  { input: 'Photosynthesis',                          expected: 'Photosynthesis',           desc: 'single word unchanged' },
+  { input: 'World War II',                            expected: 'World War II',             desc: 'alphanumeric preserved' },
+];
+
+async function runNormalisationTests() {
+  section('18. ANSWER NORMALISATION  (unit tests for normaliseAnswer)');
+  let passed = 0;
+  const suggestions = [];
+
+  for (const t of NORMALISE_CASES) {
+    const result = normaliseAnswer(t.input);
+    if (result === t.expected) {
+      passed++;
+      console.log(pass(`${t.desc}: "${t.input}" → "${result}"`));
+    } else {
+      console.log(fail(`${t.desc}: "${t.input}" → "${result}" (expected "${t.expected}")`));
+      suggestions.push(`normaliseAnswer regression on "${t.desc}": got "${result}", expected "${t.expected}"`);
+    }
+  }
+
+  console.log(`\n  Result: ${passed}/${NORMALISE_CASES.length} passed`);
+  return { passed, total: NORMALISE_CASES.length, suggestions };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 19. CATEGORY REPETITION  (two /api/categories calls should not overlap)
+// ══════════════════════════════════════════════════════════════════
+
+async function runCategoryRepetitionTest() {
+  section('19. CATEGORY REPETITION  (back-to-back games should vary categories)');
+  const suggestions = [];
+
+  let first, second;
+  try {
+    first  = await get('/api/categories');
+    second = await get('/api/categories');
+  } catch { console.log(warn('  Request failed')); return { suggestions }; }
+
+  const names1 = (first.categories  ?? []).map(c => (typeof c === 'object' ? c.name : c).toLowerCase());
+  const names2 = (second.categories ?? []).map(c => (typeof c === 'object' ? c.name : c).toLowerCase());
+
+  const exactOverlap = names1.filter(n => names2.includes(n));
+
+  console.log(`\n  Game 1: ${names1.join(', ')}`);
+  console.log(`  Game 2: ${names2.join(', ')}`);
+
+  if (exactOverlap.length === 0) {
+    console.log(pass(`\n  No exact category name overlap`));
+  } else {
+    console.log(fail(`\n  ${exactOverlap.length} exact overlap(s): ${exactOverlap.join(', ')}`));
+    suggestions.push(`Category repetition: ${exactOverlap.length} category name(s) repeated across back-to-back games: ${exactOverlap.join(', ')}`);
+  }
+
+  // GPT check for thematic overlap (same subject dressed differently)
+  let thematicIssues = 0;
+  try {
+    const result = await gptRate(
+      'You are checking whether two Jeopardy game category lists cover significantly overlapping subjects. Minor variation in wording is fine; flag only when two categories from different games are clearly about the same topic. Return JSON: { "overlapping_pairs": [{"cat1": string, "cat2": string}] }',
+      `Game 1 categories: ${names1.join(', ')}\nGame 2 categories: ${names2.join(', ')}`,
+    );
+    const pairs = result?.overlapping_pairs ?? [];
+    thematicIssues = pairs.length;
+    if (pairs.length === 0) {
+      console.log(pass('  No thematic overlap detected'));
+    } else {
+      pairs.forEach(p => {
+        console.log(fail(`  Thematic overlap: "${p.cat1}" ↔ "${p.cat2}"`));
+        suggestions.push(`Category thematic overlap across games: "${p.cat1}" ↔ "${p.cat2}"`);
+      });
+    }
+  } catch { console.log(warn('  Thematic overlap check failed')); }
+
+  console.log(`\n  Result: ${exactOverlap.length} exact + ${thematicIssues} thematic overlap(s)`);
+  return { exactOverlap: exactOverlap.length, thematicOverlap: thematicIssues, suggestions };
+}
+
+// ══════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════
 
@@ -888,9 +990,11 @@ async function main() {
   const isolationRes = await runWrongAnswerIsolationTest();
   const factualRes   = await runFactualAccuracyTests();
   const logicalRes   = await runLogicalFitTests();
+  const normalRes    = await runNormalisationTests();
+  const repeatRes    = await runCategoryRepetitionTest();
 
   // ── Suggestions ──
-  const allResults = [judgeRes, consistRes, clarifyRes, clueRes, diffRes, coherRes, varietyRes, calibRes, specRes, plausRes, domainRes, latencyRes, boardRes, phrasingRes, isolationRes, factualRes, logicalRes];
+  const allResults = [judgeRes, consistRes, clarifyRes, clueRes, diffRes, coherRes, varietyRes, calibRes, specRes, plausRes, domainRes, latencyRes, boardRes, phrasingRes, isolationRes, factualRes, logicalRes, normalRes, repeatRes];
   const allSuggestions    = allResults.flatMap(r => r?.suggestions ?? []);
   const uniqueSuggestions = [...new Set(allSuggestions)];
 
@@ -919,6 +1023,8 @@ async function main() {
   console.log(`  Wrong ans isolaton : ${isolationRes.totalRepeats ?? '?'} repeat(s) across 8 sequential answers`);
   console.log(`  Factual accuracy   : ${factualRes.passed ?? '?'}/${factualRes.total ?? '?'} clues passed fact-check`);
   console.log(`  Logical fit        : ${logicalRes.passed ?? '?'}/${logicalRes.total ?? '?'} clues logically lead to answer`);
+  console.log(`  Answer normalise   : ${normalRes.passed ?? '?'}/${normalRes.total ?? '?'} unit tests passed`);
+  console.log(`  Category repeat    : ${repeatRes.exactOverlap ?? '?'} exact + ${repeatRes.thematicOverlap ?? '?'} thematic overlap(s)`);
   console.log(`  Board diversity    : ${domainRes.diversity ?? '?'} unique domains`);
   console.log(`  Latency (judge)    : ${lat['/api/judge'] ?? '?'}ms`);
   console.log(`  Latency (category) : ${lat['/api/category'] ?? '?'}ms`);
@@ -948,7 +1054,9 @@ async function main() {
       specialtyDeltaPP:   Math.round((specRes.delta ?? 0) * 100),
       wrongAnsRepeats:    isolationRes.totalRepeats,
       factualAccuracy:    { passed: factualRes.passed,  total: factualRes.total,  errors: factualRes.errors },
-      logicalFit:         { passed: logicalRes.passed, total: logicalRes.total, mismatches: logicalRes.mismatches },
+      logicalFit:         { passed: logicalRes.passed,  total: logicalRes.total,  mismatches: logicalRes.mismatches },
+      answerNormalise:    { passed: normalRes.passed,  total: normalRes.total },
+      categoryRepeat:     { exactOverlap: repeatRes.exactOverlap, thematicOverlap: repeatRes.thematicOverlap },
       boardDiversity:     domainRes.diversity,
       latencyMs:          lat,
     },
@@ -958,7 +1066,7 @@ async function main() {
       clueQuality: clueRes, difficulty: diffRes, coherence: coherRes,
       variety: varietyRes, calibration: calibRes, specialty: specRes,
       plausibility: plausRes, domain: domainRes, latency: latencyRes,
-      boardUniqueness: boardRes, phrasing: phrasingRes, isolation: isolationRes, factual: factualRes, logical: logicalRes,
+      boardUniqueness: boardRes, phrasing: phrasingRes, isolation: isolationRes, factual: factualRes, logical: logicalRes, normalisation: normalRes, categoryRepeat: repeatRes,
     },
   };
 
