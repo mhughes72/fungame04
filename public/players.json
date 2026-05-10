@@ -8,17 +8,119 @@
     "isHuman":  false,
     "avatar":   "🤖",
     "strategy": "highValue",
-    "knowledge":"all",
     "speed":    "fast",
-    "accuracy": 0.90
+    "accuracy": 0.90,
+    "specialties": {
+      "science":    1.5,
+      "history":    1.1,
+      "popculture": 0.45,
+      "sports":     0.55,
+      "arts":       0.7,
+      "geography":  1.0,
+      "food":       0.65,
+      "general":    1.0
+    },
+    "riskTolerance": "aggressive",
+    "_riskTolerance": "aggressive | conservative | calculated — how boldly the AI wagers on Daily Doubles (not yet active)",
+    "buzzAggressiveness": 1.3,
+    "_buzzAggressiveness": "0.0–2.0 multiplier on per-question buzz probability (not yet active)",
+    "reactionVoice": "clinical",
+    "_reactionVoice": "clinical | snarky | warm | dramatic — tone of result message feedback (not yet active)"
   },
   {
     "name":     "Deep Blue",
     "isHuman":  false,
     "avatar":   "♟️",
     "strategy": "sweepCategory",
-    "knowledge":"all",
     "speed":    "medium",
-    "accuracy": 0.75
+    "accuracy": 0.75,
+    "specialties": {
+      "science":    0.85,
+      "history":    1.35,
+      "popculture": 0.65,
+      "sports":     1.2,
+      "arts":       0.8,
+      "geography":  1.15,
+      "food":       0.8,
+      "general":    1.0
+    },
+    "riskTolerance": "calculated",
+    "_riskTolerance": "aggressive | conservative | calculated — how boldly the AI wagers on Daily Doubles (not yet active)",
+    "buzzAggressiveness": 0.85,
+    "_buzzAggressiveness": "0.0–2.0 multiplier on per-question buzz probability (not yet active)",
+    "reactionVoice": "warm",
+    "_reactionVoice": "clinical | snarky | warm | dramatic — tone of result message feedback (not yet active)"
+  },
+  {
+    "name":     "The Professor",
+    "isHuman":  false,
+    "avatar":   "🎓",
+    "strategy": "highValue",
+    "speed":    "slow",
+    "accuracy": 0.93,
+    "specialties": {
+      "science":    1.2,
+      "history":    1.25,
+      "popculture": 0.25,
+      "sports":     0.2,
+      "arts":       1.5,
+      "geography":  1.1,
+      "food":       0.65,
+      "general":    1.0
+    },
+    "riskTolerance": "calculated",
+    "_riskTolerance": "aggressive | conservative | calculated — how boldly the AI wagers on Daily Doubles (not yet active)",
+    "buzzAggressiveness": 0.45,
+    "_buzzAggressiveness": "0.0–2.0 multiplier on per-question buzz probability (not yet active)",
+    "reactionVoice": "dramatic",
+    "_reactionVoice": "clinical | snarky | warm | dramatic — tone of result message feedback (not yet active)"
+  },
+  {
+    "name":     "Roxie",
+    "isHuman":  false,
+    "avatar":   "💅",
+    "strategy": "random",
+    "speed":    "fast",
+    "accuracy": 0.78,
+    "specialties": {
+      "science":    0.2,
+      "history":    0.4,
+      "popculture": 1.9,
+      "sports":     0.75,
+      "arts":       1.05,
+      "geography":  0.6,
+      "food":       1.45,
+      "general":    0.9
+    },
+    "riskTolerance": "aggressive",
+    "_riskTolerance": "aggressive | conservative | calculated — how boldly the AI wagers on Daily Doubles (not yet active)",
+    "buzzAggressiveness": 1.5,
+    "_buzzAggressiveness": "0.0–2.0 multiplier on per-question buzz probability (not yet active)",
+    "reactionVoice": "snarky",
+    "_reactionVoice": "clinical | snarky | warm | dramatic — tone of result message feedback (not yet active)"
+  },
+  {
+    "name":     "ARIA",
+    "isHuman":  false,
+    "avatar":   "🎲",
+    "strategy": "random",
+    "speed":    "fast",
+    "accuracy": 0.58,
+    "specialties": {
+      "science":    0.95,
+      "history":    1.05,
+      "popculture": 1.1,
+      "sports":     0.9,
+      "arts":       1.0,
+      "geography":  1.05,
+      "food":       0.95,
+      "general":    1.0
+    },
+    "riskTolerance": "aggressive",
+    "_riskTolerance": "aggressive | conservative | calculated — how boldly the AI wagers on Daily Doubles (not yet active)",
+    "buzzAggressiveness": 2.0,
+    "_buzzAggressiveness": "0.0–2.0 multiplier on per-question buzz probability (not yet active)",
+    "reactionVoice": "snarky",
+    "_reactionVoice": "clinical | snarky | warm | dramatic — tone of result message feedback (not yet active)"
   }
 ]

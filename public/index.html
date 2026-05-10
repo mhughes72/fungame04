@@ -10,7 +10,17 @@
 
   <header>
     <h1>AI JEOPARDY!</h1>
+    <button id="cheat-btn">Cheat</button>
   </header>
+
+  <div id="cheat-overlay" class="hidden"></div>
+  <div id="cheat-modal" class="hidden">
+    <div id="cheat-inner">
+      <div id="cheat-title">Cheat Codes</div>
+      <button id="cheat-end-game">End Game Now</button>
+      <button id="cheat-close">Close</button>
+    </div>
+  </div>
 
   <div id="scoreboard"></div>
 
@@ -30,10 +40,26 @@
   <div id="modal" class="hidden" role="dialog" aria-modal="true">
     <div id="modal-inner">
 
-      <!-- Phase 1: Clue + buzz button -->
-      <div id="phase-clue">
+      <!-- Persistent clue header (hidden during bet phase) -->
+      <div id="clue-header" class="hidden">
         <p id="category-label"></p>
         <div id="clue-text"></div>
+        <hr id="clue-divider" />
+      </div>
+
+      <!-- Phase Daily Double: wager -->
+      <div id="phase-bet" class="hidden">
+        <div id="daily-double-banner">DAILY DOUBLE!</div>
+        <p id="bet-instruction"></p>
+        <div id="bet-form">
+          <input type="number" id="bet-input" placeholder="Your wager" min="1" />
+          <button id="bet-submit-btn">Place Wager</button>
+        </div>
+        <div id="ai-bet-display" class="hidden"></div>
+      </div>
+
+      <!-- Phase 1: Clue + buzz button -->
+      <div id="phase-clue">
         <div id="buzz-timer-track"><div id="buzz-timer-bar"></div></div>
         <button id="buzz-btn" class="locked">BUZZ IN</button>
       </div>
@@ -90,6 +116,8 @@
 
     </div>
   </div>
+
+  <div id="game-over" class="hidden"></div>
 
   <script src="game.js"></script>
 </body>

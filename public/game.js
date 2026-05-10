@@ -20,9 +20,10 @@ const SPEED_RANGES = {
 
 const AI_BUZZ_CHANCE = { 200: 0.97, 400: 0.88, 600: 0.72, 800: 0.55, 1000: 0.40 };
 
-let PLAYERS = [];
-let CATEGORIES = [];
-let board      = [];
+let PLAYERS         = [];
+let CATEGORIES      = [];
+let categoryDomains = [];
+let board           = [];
 const scores   = [];
 
 let activeCell       = null;
@@ -30,8 +31,32 @@ let clueOpen         = false;
 let aiTimers         = [];
 let revealInterval   = null;
 let attemptedPlayers = new Set();
+let wrongAnswers     = [];
 let buzzTimeout      = null;
 let boardController  = 0;
+let dailyDoubles     = new Set();
+let isDailyDouble    = false;
+let currentWager     = 0;
+let tileSelectorIdx  = 0;
+let clueHadCorrect   = false;
+
+let playerStats = [];
+let stumpedCount = 0;
+
+function initStats() {
+  playerStats = PLAYERS.map(() => ({
+    correct:        0,
+    attempts:       0,
+    currentStreak:  0,
+    longestStreak:  0,
+    biggestWin:     0,
+    biggestLoss:    0,
+    ddAttempts:     0,
+    ddCorrect:      0,
+    correctPerCat:  new Array(6).fill(0),
+  }));
+  stumpedCount = 0;
+}
 
 function setController(playerIdx) {
   boardController = playerIdx;
@@ -77,6 +102,14 @@ const aiBuzzName     = document.getElementById('ai-buzz-name');
 const aiBuzzStatus   = document.getElementById('ai-buzz-status');
 const aiAnswerReveal = document.getElementById('ai-answer-reveal');
 
+const clueHeader     = document.getElementById('clue-header');
+const phaseBet       = document.getElementById('phase-bet');
+const betInstruction = document.getElementById('bet-instruction');
+const betFormEl      = document.getElementById('bet-form');
+const betInput       = document.getElementById('bet-input');
+const betSubmitBtn   = document.getElementById('bet-submit-btn');
+const aiBetDisplay   = document.getElementById('ai-bet-display');
+
 // ── Scoreboard ──
 const scoreEls = [];
 
@@ -115,22 +148,31 @@ function refreshLeader() {
 async function init() {
   try {
     const [playersRes, categoriesRes] = await Promise.all([
-      fetch('/players.json'),
+      fetch('/api/players'),
       fetch('/api/categories'),
     ]);
 
     PLAYERS    = await playersRes.json();
     const cats = await categoriesRes.json();
-    CATEGORIES = cats.categories;
+    // Support both old string[] and new {name, domain}[] format
+    if (cats.categories.length && typeof cats.categories[0] === 'object') {
+      CATEGORIES      = cats.categories.map(c => c.name);
+      categoryDomains = cats.categories.map(c => c.domain || 'general');
+    } else {
+      CATEGORIES      = cats.categories;
+      categoryDomains = cats.categories.map(() => 'general');
+    }
 
     PLAYERS.forEach(() => scores.push(0));
     buildScoreboard();
     setController(0);
+    initStats();
 
     board = CATEGORIES.map(() =>
       VALUES.map(() => ({ clue: null, answer: null, state: 'loading' }))
     );
     buildBoard();
+    assignDailyDoubles();
 
     loadingScreen.classList.add('fade-out');
     setTimeout(() => loadingScreen.remove(), 400);
@@ -149,6 +191,16 @@ async function init() {
     document.querySelector('#loading-inner p').textContent = 'Failed to load. Check server.';
     console.error(err);
   }
+}
+
+function assignDailyDoubles() {
+  const allCells = [];
+  CATEGORIES.forEach((_, ci) => VALUES.forEach((_, vi) => allCells.push(`${ci},${vi}`)));
+  for (let i = allCells.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
+  }
+  dailyDoubles = new Set(allCells.slice(0, 2));
 }
 
 function applyTestClues() {
@@ -221,7 +273,7 @@ function onCellClick(e) {
 
 // ── Modal ──
 function showPhase(phase) {
-  [phaseClue, phaseListen, phaseClarify, phaseJudging, phaseResult, phaseAI]
+  [phaseClue, phaseListen, phaseClarify, phaseJudging, phaseResult, phaseAI, phaseBet]
     .forEach(p => p.classList.add('hidden'));
   phase.classList.remove('hidden');
 }
@@ -232,11 +284,19 @@ function openModal(ci, vi) {
   categoryLabel.textContent = `${CATEGORIES[ci]} — $${VALUES[vi]}`;
   clueText.textContent = entry.clue;
   transcriptDisp.textContent = '';
-  buzzBtn.classList.add('locked');
-  showPhase(phaseClue);
   overlay.classList.remove('hidden');
   modal.classList.remove('hidden');
-  revealClue(entry.clue, activateBuzzing);
+
+  tileSelectorIdx = boardController;
+
+  if (dailyDoubles.has(`${ci},${vi}`)) {
+    openDailyDouble(ci, vi);
+  } else {
+    clueHeader.classList.remove('hidden');
+    buzzBtn.classList.add('locked');
+    showPhase(phaseClue);
+    revealClue(entry.clue, activateBuzzing);
+  }
 }
 
 function activateBuzzing() {
@@ -255,6 +315,13 @@ function closeModal() {
   clearBuzzTimer();
   clueOpen = false;
   attemptedPlayers.clear();
+  wrongAnswers   = [];
+  clueHadCorrect = false;
+  isDailyDouble  = false;
+  currentWager  = 0;
+  clueHeader.classList.add('hidden');
+  buzzBtn.classList.remove('hidden');
+  document.getElementById('buzz-timer-track').classList.remove('hidden');
   overlay.classList.add('hidden');
   modal.classList.add('hidden');
   activeCell = null;
@@ -312,6 +379,8 @@ function clueExpired() {
   board[ci][vi].state = 'done';
   getCell(ci, vi).classList.add('answered');
   getCell(ci, vi).textContent = '';
+  if (!clueHadCorrect) stumpedCount++;
+  setController(tileSelectorIdx);
   resultBadge.textContent   = '⏱️';
   resultMessage.innerHTML   = "Time's up — nobody got it.";
   correctReveal.textContent = `Correct answer: ${board[ci][vi].answer}`;
@@ -348,6 +417,116 @@ function cancelAITimers() {
   aiTimers = [];
 }
 
+// ── Daily Double ──
+function openDailyDouble(ci, vi) {
+  isDailyDouble = true;
+  const selectorIdx = boardController;
+  const player      = PLAYERS[selectorIdx];
+  const maxBet      = Math.max(scores[selectorIdx], 1000);
+
+  categoryLabel.textContent = `${CATEGORIES[ci]} — DAILY DOUBLE!`;
+  showPhase(phaseBet);
+
+  if (player.isHuman) {
+    betInstruction.textContent = `Wager up to $${maxBet.toLocaleString()}`;
+    betInput.max   = maxBet;
+    betInput.min   = 1;
+    betInput.value = '';
+    betFormEl.classList.remove('hidden');
+    aiBetDisplay.classList.add('hidden');
+    betInput.focus();
+  } else {
+    const accuracy = player.accuracy ?? 1.0;
+    const bet      = Math.max(1, Math.round(maxBet * accuracy * (0.7 + Math.random() * 0.3)));
+    currentWager   = bet;
+    betInstruction.textContent = `${player.name} is wagering…`;
+    betFormEl.classList.add('hidden');
+    aiBetDisplay.textContent = `$${bet.toLocaleString()}`;
+    aiBetDisplay.classList.remove('hidden');
+    setTimeout(() => startDailyDoubleClue(ci, vi, selectorIdx), 2500);
+  }
+}
+
+betSubmitBtn.addEventListener('click', () => {
+  const { ci, vi } = activeCell;
+  const selectorIdx = boardController;
+  const maxBet      = Math.max(scores[selectorIdx], 1000);
+  let bet = parseInt(betInput.value, 10);
+  if (isNaN(bet) || bet < 1) bet = 1;
+  if (bet > maxBet) bet = maxBet;
+  currentWager = bet;
+  startDailyDoubleClue(ci, vi, selectorIdx);
+});
+
+betInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') betSubmitBtn.click();
+});
+
+betInput.addEventListener('input', () => {
+  const max = parseInt(betInput.max, 10);
+  const val = parseInt(betInput.value, 10);
+  if (!isNaN(val) && !isNaN(max) && val > max) betInput.value = max;
+  if (!isNaN(val) && val < 1) betInput.value = 1;
+});
+
+function startDailyDoubleClue(ci, vi, playerIdx) {
+  const entry = board[ci][vi];
+  clueHeader.classList.remove('hidden');
+  buzzBtn.classList.add('hidden');
+  document.getElementById('buzz-timer-track').classList.add('hidden');
+  showPhase(phaseClue);
+  if (PLAYERS[playerIdx].isHuman) {
+    revealClue(entry.clue, () => startListening());
+  } else {
+    revealClue(entry.clue, () => handleAIDailyDouble(playerIdx));
+  }
+}
+
+async function handleAIDailyDouble(playerIdx) {
+  const { ci, vi } = activeCell;
+  const entry  = board[ci][vi];
+  const player = PLAYERS[playerIdx];
+
+  showPhase(phaseAI);
+  aiBuzzName.textContent   = `${player.name} — Daily Double!`;
+  aiBuzzStatus.textContent = 'Thinking…';
+  aiAnswerReveal.classList.add('hidden');
+  aiAnswerReveal.textContent = '';
+
+  let spokenAnswer = '';
+  try {
+    const res  = await fetch('/api/ai-answer', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ clue: entry.clue, category: CATEGORIES[ci], value: VALUES[vi], accuracy: player.accuracy ?? 1.0, domain: categoryDomains[ci] ?? 'general', specialties: player.specialties ?? {} }),
+    });
+    const data = await res.json();
+    spokenAnswer = data.answer || '';
+  } catch { /* leave empty */ }
+
+  aiBuzzStatus.textContent   = 'Answer:';
+  aiAnswerReveal.textContent = `"${spokenAnswer}"`;
+  aiAnswerReveal.classList.remove('hidden');
+  await sleep(900);
+  showPhase(phaseJudging);
+
+  try {
+    const judgeRes  = await fetch('/api/judge', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenAnswer }),
+    });
+    const judgeData = await judgeRes.json();
+    if (judgeData.needsClarification) {
+      await handleAIClarification(playerIdx, entry, ci, vi, spokenAnswer);
+    } else {
+      showResult(playerIdx, judgeData.correct, judgeData.message, entry.answer, currentWager);
+    }
+  } catch {
+    showResult(playerIdx, false, 'Judge unavailable.', entry.answer, currentWager);
+  }
+}
+
 // ── AI answer flow ──
 async function handleAIBuzz(playerIdx) {
   const { ci, vi } = activeCell;
@@ -366,10 +545,13 @@ async function handleAIBuzz(playerIdx) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        clue:     entry.clue,
-        category: CATEGORIES[ci],
-        value:    VALUES[vi],
-        accuracy: player.accuracy ?? 1.0,
+        clue:        entry.clue,
+        category:    CATEGORIES[ci],
+        value:       VALUES[vi],
+        accuracy:    player.accuracy ?? 1.0,
+        domain:      categoryDomains[ci] ?? 'general',
+        specialties: player.specialties ?? {},
+        wrongAnswers,
       }),
     });
     const data = await res.json();
@@ -394,6 +576,7 @@ async function handleAIBuzz(playerIdx) {
     if (judgeData.needsClarification) {
       await handleAIClarification(playerIdx, entry, ci, vi, spokenAnswer);
     } else {
+      if (!judgeData.correct) wrongAnswers.push(spokenAnswer);
       showResult(playerIdx, judgeData.correct, judgeData.message, entry.answer, VALUES[vi]);
     }
   } catch {
@@ -443,9 +626,9 @@ async function handleAIClarification(playerIdx, entry, ci, vi, previousAnswer) {
       body: JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: clarifiedAnswer, clarification: true }),
     });
     const data = await res.json();
-    showResult(playerIdx, !!data.correct, data.message, entry.answer, VALUES[vi]);
+    showResult(playerIdx, !!data.correct, data.message, entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
   } catch {
-    showResult(playerIdx, false, 'Judge unavailable.', entry.answer, VALUES[vi]);
+    showResult(playerIdx, false, 'Judge unavailable.', entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
   }
 }
 
@@ -532,13 +715,14 @@ async function submitHumanAnswer(spokenText) {
       body: JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenText }),
     });
     const data = await res.json();
+    const val = isDailyDouble ? currentWager : VALUES[vi];
     if (data.needsClarification) {
-      showClarification(spokenText, VALUES[vi]);
+      showClarification(spokenText, val);
     } else {
-      showResult(0, data.correct, data.message, entry.answer, VALUES[vi]);
+      showResult(0, data.correct, data.message, entry.answer, val);
     }
   } catch {
-    showResult(0, false, 'Could not reach the judge.', entry.answer, VALUES[vi]);
+    showResult(0, false, 'Could not reach the judge.', entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
   }
 }
 
@@ -630,8 +814,27 @@ function showResult(playerIdx, correct, message, correctAnswer, value) {
   attemptedPlayers.add(playerIdx);
   updateScore(playerIdx, correct ? value : -value);
 
+  // ── Stats ──
+  const s = playerStats[playerIdx];
+  s.attempts++;
+  if (isDailyDouble) s.ddAttempts++;
+  if (correct) {
+    s.correct++;
+    s.currentStreak++;
+    s.longestStreak = Math.max(s.longestStreak, s.currentStreak);
+    s.biggestWin    = Math.max(s.biggestWin, value);
+    s.correctPerCat[ci]++;
+    if (isDailyDouble) s.ddCorrect++;
+    clueHadCorrect = true;
+  } else {
+    s.currentStreak = 0;
+    s.biggestLoss   = Math.max(s.biggestLoss, value);
+  }
+
   const remaining = PLAYERS.filter((_, i) => !attemptedPlayers.has(i));
-  const clueOver  = correct || remaining.length === 0;
+  const clueOver  = isDailyDouble || correct || remaining.length === 0;
+
+  if (clueOver && !clueHadCorrect) stumpedCount++;
 
   if (clueOver) {
     board[ci][vi].state = 'done';
@@ -645,7 +848,7 @@ function showResult(playerIdx, correct, message, correctAnswer, value) {
   correctReveal.textContent = clueOver ? `Correct answer: ${correctAnswer}` : '';
   continueBtn.classList.toggle('hidden', !clueOver);
 
-  if (clueOver && correct) setController(playerIdx);
+  if (clueOver) setController(correct ? playerIdx : tileSelectorIdx);
 
   showPhase(phaseResult);
   if (clueOver) continueBtn.focus();
@@ -656,6 +859,8 @@ function showResult(playerIdx, correct, message, correctAnswer, value) {
 continueBtn.addEventListener('click', () => {
   const controller = boardController;
   closeModal();
+  const anyOpen = board.some(col => col.some(cell => cell.state === 'open'));
+  if (!anyOpen) { showBreakdown(); return; }
   if (!PLAYERS[controller].isHuman) aiSelectTile(controller);
 });
 
@@ -703,6 +908,98 @@ function pickTile(strategy) {
 
   return open[Math.floor(Math.random() * open.length)];
 }
+
+// ── Post-game breakdown ──
+function showBreakdown() {
+  const el = document.getElementById('game-over');
+
+  const winner     = scores.indexOf(Math.max(...scores));
+  const totalClues = CATEGORIES.length * VALUES.length;
+
+  // Category each player dominated
+  const catDominator = CATEGORIES.map((_, ci) => {
+    const best = playerStats.reduce((a, b) => b.correctPerCat[ci] > a.correctPerCat[ci] ? b : a);
+    const idx  = playerStats.indexOf(best);
+    return best.correctPerCat[ci] > 0 ? idx : null;
+  });
+
+  // Longest streak across all players
+  const streakLeader = playerStats.reduce((a, b, i) =>
+    b.longestStreak > playerStats[a].longestStreak ? i : a, 0);
+
+  // Best DD moment
+  const ddPlayers = playerStats.filter(s => s.ddAttempts > 0);
+  const ddBest    = ddPlayers.length
+    ? playerStats.reduce((a, b, i) => b.biggestWin > playerStats[a].biggestWin ? i : a, 0)
+    : null;
+
+  el.innerHTML = `
+    <div id="breakdown-inner">
+      <div id="breakdown-winner">
+        ${PLAYERS[winner].avatar ? PLAYERS[winner].avatar + ' ' : ''}${PLAYERS[winner].name} wins!
+        <div id="breakdown-winner-score">$${scores[winner].toLocaleString()}</div>
+      </div>
+
+      <div id="breakdown-players">
+        ${PLAYERS.map((p, i) => {
+          const s    = playerStats[i];
+          const pct  = s.attempts ? Math.round(s.correct / s.attempts * 100) : 0;
+          const ddLine = s.ddAttempts
+            ? `<div class="bd-stat"><span>Daily Double</span><span>${s.ddCorrect}/${s.ddAttempts}</span></div>`
+            : '';
+          const streakLine = s.longestStreak >= 2
+            ? `<div class="bd-stat"><span>Best streak</span><span>${s.longestStreak} in a row</span></div>`
+            : '';
+          return `
+            <div class="bd-player-card${i === winner ? ' bd-winner' : ''}">
+              <div class="bd-name">${p.avatar ? p.avatar + ' ' : ''}${p.name}</div>
+              <div class="bd-score">$${scores[i].toLocaleString()}</div>
+              <div class="bd-stat"><span>Correct</span><span>${s.correct}/${s.attempts} (${pct}%)</span></div>
+              ${ddLine}
+              ${streakLine}
+            </div>`;
+        }).join('')}
+      </div>
+
+      <div id="breakdown-highlights">
+        <div class="bd-highlight-title">Highlights</div>
+        <div id="bd-highlight-grid">
+          ${stumpedCount > 0 ? `<div class="bd-highlight"><div class="bd-hl-val">${stumpedCount}</div><div class="bd-hl-label">clue${stumpedCount !== 1 ? 's' : ''} stumped everyone</div></div>` : ''}
+          ${playerStats[streakLeader].longestStreak >= 3 ? `<div class="bd-highlight"><div class="bd-hl-val">${playerStats[streakLeader].longestStreak}</div><div class="bd-hl-label">${PLAYERS[streakLeader].name}'s longest streak</div></div>` : ''}
+          ${ddBest !== null && playerStats[ddBest].biggestWin > 0 ? `<div class="bd-highlight"><div class="bd-hl-val">$${playerStats[ddBest].biggestWin.toLocaleString()}</div><div class="bd-hl-label">${PLAYERS[ddBest].name}'s biggest Daily Double</div></div>` : ''}
+          ${catDominator.map((pi, ci) => pi !== null
+            ? `<div class="bd-highlight"><div class="bd-hl-val">${CATEGORIES[ci]}</div><div class="bd-hl-label">owned by ${PLAYERS[pi].name}</div></div>`
+            : '').join('')}
+        </div>
+      </div>
+
+      <button id="play-again-btn">Play Again</button>
+    </div>`;
+
+  document.getElementById('play-again-btn').addEventListener('click', () => location.reload());
+  el.classList.remove('hidden');
+}
+
+// ── Cheat menu ──
+document.getElementById('cheat-btn').addEventListener('click', () => {
+  document.getElementById('cheat-overlay').classList.remove('hidden');
+  document.getElementById('cheat-modal').classList.remove('hidden');
+});
+
+function closeCheat() {
+  document.getElementById('cheat-overlay').classList.add('hidden');
+  document.getElementById('cheat-modal').classList.add('hidden');
+}
+
+document.getElementById('cheat-close').addEventListener('click', closeCheat);
+document.getElementById('cheat-overlay').addEventListener('click', closeCheat);
+
+document.getElementById('cheat-end-game').addEventListener('click', () => {
+  closeCheat();
+  if (activeCell) closeModal();
+  board.forEach(col => col.forEach(cell => { if (cell.state !== 'done') cell.state = 'done'; }));
+  showBreakdown();
+});
 
 // ── Boot ──
 init();
