@@ -837,7 +837,7 @@ async function runLogicalFitTests() {
       let result;
       try {
         result = await gptRate(
-          `You are checking whether a Jeopardy clue logically leads to its stated answer. Ignore whether the facts are true — only judge whether a knowledgeable player reading the clue would arrive at the given answer as the intended response. Flag it if the clue describes something different from the answer, or if the answer does not follow logically from the clue's description. Return JSON: { "fits": true|false, "reason": string|null }`,
+          `You are checking whether a Jeopardy clue logically leads to its stated answer. Ignore whether facts are true — only judge whether a knowledgeable player reading the clue would arrive at the given answer. Important: in Jeopardy it is valid and common for a clue to describe a specific example, property, or characteristic of something while the answer is the general concept (e.g. clue describes chia seeds' fiber content → answer "Fiber" is correct; clue describes blueberry health compounds → answer "Blueberry" is correct). Only flag a mismatch when the clue clearly describes a different subject than the answer, or when the answer could not reasonably be inferred from the clue at all. Return JSON: { "fits": true|false, "reason": string|null }`,
           `Clue: ${clue.clue}\nAnswer: ${clue.answer}`,
         );
       } catch { result = null; }

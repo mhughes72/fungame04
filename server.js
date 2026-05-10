@@ -35,9 +35,13 @@ app.get('/api/players', (req, res) => {
 // Step 1: generate category names only (fast)
 app.get('/api/categories', async (req, res) => {
   try {
-    const usedAnswers = loadUsedAnswers();
-    const avoidClause = usedAnswers.length
+    const usedAnswers     = loadUsedAnswers();
+    const usedCategories  = loadUsedCategories();
+    const avoidAnswers    = usedAnswers.length
       ? `\nIMPORTANT: The following answers have appeared recently — do NOT design categories that would rely heavily on them: ${usedAnswers.slice(-30).join(', ')}.`
+      : '';
+    const avoidCategories = usedCategories.length
+      ? `\nDo NOT reuse or closely overlap with these recent category themes: ${usedCategories.slice(-30).join(', ')}.`
       : '';
     const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -46,10 +50,13 @@ app.get('/api/categories', async (req, res) => {
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: 'Return JSON only.' },
-        { role: 'user',   content: `Generate 6 diverse, creative Jeopardy category names — mix subjects like history, science, pop culture, language, geography, sports, arts. Avoid the most obvious, overused topics (no generic "World War II", "The Renaissance", "Classic Rock" etc.) — aim for interesting angles and niche subjects.${avoidClause} For each category also pick the single best domain from: science, history, popculture, sports, arts, geography, food, language, general. Return JSON: { "categories": [{"name": "...", "domain": "..."}, ...] }` },
+        { role: 'user',   content: `Generate 6 diverse, creative Jeopardy category names — mix subjects like history, science, pop culture, language, geography, sports, arts. Avoid the most obvious, overused topics (no generic "World War II", "The Renaissance", "Classic Rock" etc.) — aim for interesting angles and niche subjects.${avoidAnswers}${avoidCategories} For each category also pick the single best domain from: science, history, popculture, sports, arts, geography, food, language, general. Return JSON: { "categories": [{"name": "...", "domain": "..."}, ...] }` },
       ],
     });
     const json = JSON.parse(completion.choices[0].message.content);
+    // Record category names for future exclusion
+    const names = (json.categories ?? []).map(c => (typeof c === 'object' ? c.name : c).toLowerCase());
+    if (names.length) recordCategories(names);
     res.json(json);
   } catch (err) {
     console.error('Categories error:', err.message);
@@ -58,8 +65,10 @@ app.get('/api/categories', async (req, res) => {
 });
 
 // Persistent answer history to avoid repeating famous answers across games
-const USED_ANSWERS_FILE = path.join(__dirname, 'used-answers.json');
-const MAX_USED_ANSWERS  = 200;
+const USED_ANSWERS_FILE    = path.join(__dirname, 'used-answers.json');
+const USED_CATEGORIES_FILE = path.join(__dirname, 'used-categories.json');
+const MAX_USED_ANSWERS     = 200;
+const MAX_USED_CATEGORIES  = 60;
 
 function loadUsedAnswers() {
   try { return JSON.parse(fs.readFileSync(USED_ANSWERS_FILE, 'utf8')); } catch { return []; }
@@ -67,6 +76,16 @@ function loadUsedAnswers() {
 
 function saveUsedAnswers(list) {
   fs.writeFileSync(USED_ANSWERS_FILE, JSON.stringify(list, null, 2));
+}
+
+function loadUsedCategories() {
+  try { return JSON.parse(fs.readFileSync(USED_CATEGORIES_FILE, 'utf8')); } catch { return []; }
+}
+
+function recordCategories(names) {
+  const list    = loadUsedCategories();
+  const updated = [...new Set([...list, ...names])].slice(-MAX_USED_CATEGORIES);
+  fs.writeFileSync(USED_CATEGORIES_FILE, JSON.stringify(updated, null, 2));
 }
 
 function normaliseAnswer(answer) {
