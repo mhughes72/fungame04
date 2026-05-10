@@ -50,7 +50,7 @@ app.get('/api/categories', async (req, res) => {
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: 'Return JSON only.' },
-        { role: 'user',   content: `Generate 6 diverse, creative Jeopardy category names — mix subjects like history, science, pop culture, language, geography, sports, arts. Aim for interesting, unusual angles rather than generic topics. Avoid categories where writing accurate clues would require knowing specific statistics, founding dates, or technical records about obscure subjects (e.g. avoid "Football Leagues Beyond the NFL" or "Space Food Facts" — these force precise niche facts). Good niche categories describe things through their general characteristics and context; bad ones require memorising obscure data. Also avoid the most overused topics (no generic "World War II", "The Renaissance", "Classic Rock" etc.).${avoidAnswers}${avoidCategories} For each category also pick the single best domain from: science, history, popculture, sports, arts, geography, food, language, general. Return JSON: { "categories": [{"name": "...", "domain": "..."}, ...] }` },
+        { role: 'user',   content: `Generate 6 diverse, creative Jeopardy category names — mix subjects like history, science, pop culture, language, geography, sports, arts. Aim for interesting, unusual angles rather than generic topics. Avoid categories where writing accurate clues would require knowing specific statistics, founding dates, or technical records about obscure subjects (e.g. avoid "Football Leagues Beyond the NFL" or "Space Food Facts" — these force precise niche facts). Good niche categories describe things through their general characteristics and context; bad ones require memorising obscure data. Also avoid the most overused topics (no generic "World War II", "The Renaissance", "Classic Rock" etc.). IMPORTANT: Do NOT generate these category types — they reliably produce hallucinated clues: (1) Abstract word-puzzle categories (palindromes, anagrams, portmanteaus, cryptic wordplay, spoonerisms) — answers defined only by spelling or sound patterns force the model to invent fake meanings. (2) Etymology categories (word origins, language roots, etymologies) — word origin claims are notoriously unreliable and hard to verify. (3) Fictional mashup categories that invite inventing things that don't exist (e.g. "Foods Inspired by the Cosmos", "Cocktails Named After Scientists", "Dishes from Fictional Worlds") — these encourage fabrication of fake food names, fake events, or fake associations rather than description of real things.${avoidAnswers}${avoidCategories} For each category also pick the single best domain from: science, history, popculture, sports, arts, geography, food, language, general. Return JSON: { "categories": [{"name": "...", "domain": "..."}, ...] }` },
       ],
     });
     const json = JSON.parse(completion.choices[0].message.content);
@@ -137,16 +137,16 @@ async function rewriteLeakingClue(clue) {
 
 async function factCheckClue(clue) {
   const completion = await client.chat.completions.create({
-    model: 'gpt-4o',
-    max_tokens: 200,
-    temperature: 0.2,
+    model: 'o4-mini',
+    max_tokens: 500,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: 'You are a fact-checker for a single Jeopardy clue. Verify every factual claim: nationalities, dates, record counts, event descriptions, attributions, language families, scientific classifications. UNCERTAINTY RULE: if a claim would not clearly appear in a mainstream encyclopedia — even if it sounds plausible — rewrite the clue to use only well-established, widely-known facts about the answer instead. It is better to rewrite than to leave a dubious claim in. If every claim is clearly correct, return it unchanged. Return JSON only.' },
-      { role: 'user',   content: `Clue: "${clue.clue}"\nAnswer: "${clue.answer}"\n\nReturn JSON: { "clue": "verified or corrected clue", "changed": true|false }` },
+      { role: 'system', content: 'You are an independent fact-checker for Jeopardy clues. The clue was written by a different AI model — your job is to verify it skeptically, not confirm it. Return JSON only.' },
+      { role: 'user',   content: `Clue: "${clue.clue}"\nAnswer: "${clue.answer}"\n\nStep 1: List every specific factual claim in the clue (album/track names, release dates, chart positions, biographical details, scientific classifications, attributions, nationalities, record counts, geographic facts).\nStep 2: Verify each claim. Be especially skeptical of: specific album or track attributions, song release dates and chart positions, details about non-famous historical figures, and word or language claims.\nStep 3: If every claim is clearly correct and verifiable from a mainstream encyclopedia, return the clue unchanged. If you have ANY doubt about a claim, rewrite the clue to use only well-established, widely-known facts about the answer instead — it is better to rewrite than to leave a dubious claim in.\n\nReturn JSON: { "clue": "verified or rewritten clue", "changed": true|false }` },
     ],
   });
   const result = JSON.parse(completion.choices[0].message.content);
+  if (result.changed) console.log(`  fact-check rewrote clue for "${clue.answer}"`);
   return { ...clue, clue: result.clue };
 }
 

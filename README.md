@@ -125,35 +125,42 @@ A **Cheat** button in the top-right header is always accessible, even when a mod
 Several mechanisms run at generation time to keep clues accurate and fair:
 
 - **Answer leak detection** — clues are scanned to ensure no word from the answer appears in the clue text. Any leaking clue is individually rewritten (up to 5 passes) rather than regenerating the whole category.
-- **Fact-checking** — each clue is independently fact-checked by a second GPT-4o pass. Claims that wouldn't appear in a mainstream encyclopedia are rewritten before the clue reaches the board.
+- **Fact-checking** — each clue is independently fact-checked by o4-mini (a separate reasoning model from the GPT-4o generator). The checker explicitly enumerates every factual claim before verifying, and rewrites any claim it cannot confirm. Using a different model avoids self-confirmation bias.
+- **Category blocklist** — certain category types that reliably produce hallucinated clues are blocked at generation time: abstract word-puzzle categories (palindromes, anagrams, spoonerisms), etymology categories (word origins are notoriously hard to verify), and fictional mashup categories that invite inventing things that don't exist (e.g. "Foods Inspired by the Cosmos").
 - **Answer deduplication** — answers are tracked across games in `used-answers.json`. Recently seen answers are excluded from future generations to prevent repetition.
 - **Category deduplication** — category themes are tracked in `used-categories.json` and excluded from future games to prevent thematic repetition.
 
 ## Eval Suite
 
-Run `node eval.js` (with the server running) to execute the full quality test suite. It covers:
+Start the server first, then run the evals in a separate terminal:
 
-- Judge accuracy & consistency
-- Clarification round-trips
-- Clue leak detection
-- Difficulty spread & inversions
-- Category coherence
-- AI accuracy calibration & specialty effectiveness
-- Wrong answer plausibility & isolation
-- Board answer uniqueness & domain diversity
-- Clue phrasing validation
-- Factual accuracy (independent fact-check)
-- Clue-answer logical fit
-- Difficulty absolute calibration ($200 vs $1000)
-- Answer normalisation unit tests
-- Category repetition across back-to-back games
-- API latency
+```
+node server.js
+```
 
-Results are exported to a timestamped `eval-results-*.json` file.
+**Round 1 eval** — general clue quality, judge accuracy, AI calibration:
+
+```
+node eval.js
+```
+
+Covers: judge accuracy & consistency, clarification round-trips, clue leak detection, difficulty spread & inversions, category coherence, AI accuracy calibration & specialty effectiveness, wrong answer plausibility & isolation, board answer uniqueness & domain diversity, clue phrasing validation, factual accuracy (independent fact-check), clue-answer logical fit, difficulty absolute calibration ($200 vs $1000), answer normalisation unit tests, category repetition across back-to-back games, API latency.
+
+Results are exported to a timestamped `eval-results-*.json` file. Takes ~5–6 minutes.
+
+**Double Jeopardy eval** — Round 2-specific quality testing:
+
+```
+node eval-r2.js
+```
+
+Covers: correct R2 values ($400–$2000), clue leak detection on R2 clues, difficulty spread & absolute calibration ($400 = medium, $2000 = expert), comparative difficulty vs Round 1, category coherence, factual accuracy, clue-answer logical fit, clue phrasing validation, category freshness between rounds, API latency.
+
+Results are exported to a timestamped `eval-r2-results-*.json` file. Takes ~3–4 minutes.
 
 ## Tech Stack
 
 - **Backend**: Node.js + Express
-- **AI**: OpenAI GPT-4o (category generation, clue writing, fact-checking), GPT-4o-mini (AI player answers, judging)
+- **AI**: OpenAI GPT-4o (category generation, clue writing), o4-mini (fact-checking), GPT-4o-mini (AI player answers, judging)
 - **Speech**: Web Speech API (Chrome only)
 - **Frontend**: Vanilla JS, no framework
