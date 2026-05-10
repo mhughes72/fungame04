@@ -102,6 +102,7 @@ async function runJudgeTests() {
       console.log(fail(`${t.desc}  →  ${R(why.join('; '))}`));
       if (!correctOk && t.desc.includes('phonetic'))       suggestions.push('Phonetic mishearing rule missing cases — add more examples to the judge prompt.');
       if (!correctOk && t.desc.includes('self-correction')) suggestions.push('Self-correction pre-processing may be failing — check stripFalseStart() on the server.');
+      if (!correctOk && t.desc.includes('demonym'))         suggestions.push('Demonym/adjectival form not being accepted — reinforce DEMONYM rule in judge prompt.');
       if (!clarifyOk)                                       suggestions.push(`Clarification not triggered for "${t.playerAnswer}" / "${t.correctAnswer}" — check CLARIFICATION RULE in judge prompt.`);
       if (!noLeak)                                          suggestions.push('Judge leaking correct answer in wrong-answer messages — reinforce the CRITICAL rule in the prompt.');
     }

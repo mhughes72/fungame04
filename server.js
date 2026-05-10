@@ -178,8 +178,8 @@ Return JSON only.`,
     const completion = await makeRequest();
     let clues = JSON.parse(completion.choices[0].message.content).clues || [];
 
-    // Fix leaking clues with targeted per-clue rewrites (up to 3 attempts each)
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Fix leaking clues with targeted per-clue rewrites (up to 5 attempts each)
+    for (let attempt = 0; attempt < 5; attempt++) {
       const leaking = clues.filter(c => answerLeaksIntoClue(c.clue, c.answer));
       if (leaking.length === 0) break;
       console.warn(`Attempt ${attempt + 1}: rewriting ${leaking.length} leaking clue(s) individually…`);
@@ -279,13 +279,14 @@ app.post('/api/judge', async (req, res) => {
 - Keep feedback very short: "Correct!" for right answers, "Incorrect." for wrong ones — no explanation
 Return JSON: { "correct": boolean, "needsClarification": false, "message": string }`
             : `You are a lenient Jeopardy judge. Rules:
-- Accept reasonable variations: adjectival/demonym forms, plural/singular, nicknames, minor spelling differences, and surnames alone when they unambiguously identify one person.
+- Accept reasonable variations: nicknames, minor spelling differences, plural/singular, and surnames alone when they unambiguously identify one person.
+- DEMONYM/ADJECTIVAL RULE: always accept adjectival or demonym forms as correct. Examples: "Egyptian" for "Ancient Egypt", "French" for "France", "Victorian" for "Victorian Era", "Roman" for "Ancient Rome". These are correct answers.
 - If the player gives a first AND last name, both must identify the correct person — a wrong first name with the right surname (e.g. "Teddy Roosevelt" when the answer is "Franklin Roosevelt") is incorrect, not a partial match.
 - Self-correction rule: if the player explicitly corrects themselves mid-answer (e.g. "Smith... No, Mandella" or "Lincoln, wait no, Washington"), judge ONLY the final corrected answer and ignore the earlier false start.
 - Speech recognition rule: this is a voice-controlled game, so the player's answer comes from speech-to-text and may be mishearing the name they intended. If the player's answer sounds phonetically like the correct answer (same syllable pattern, similar vowels/consonants) AND the clue clearly points to that person, treat it as a speech recognition error and mark it correct. Examples: "Lenin" → "Lennon", "Mayor" → "Mayer", "Frood" → "Freud", "Pluto" → "Plutarch". Do not penalise a player for what is clearly a microphone mishearing of the right answer.
 - Ignore "What is" / "Who is" phrasing.
 - CRITICAL: The "message" field must NEVER contain the correct answer or any part of it — not the name, not a hint, not a partial match. Other players may still buzz in. For wrong answers the message must be a generic phrase only, such as "That is incorrect." or "Sorry, that's wrong." — nothing else.
-- CLARIFICATION RULE: if the player gave only a surname (or partial name), ask yourself: does this surname belong to more than one distinct, well-known person in general knowledge? If yes, set needsClarification=true — do NOT use the clue to resolve the ambiguity yourself. The player must supply the full name. Examples that always need clarification: "Roosevelt" (Theodore vs Franklin), "Kennedy" (John vs Robert), "Adams" (John vs John Quincy), "Johnson" (Andrew vs Lyndon), "Bush" (George H.W. vs George W.), "Brontë" (Charlotte vs Emily). Only accept a bare surname when it so uniquely identifies one person that no other famous person shares it (e.g. "Einstein", "Shakespeare").
+- CLARIFICATION RULE: only applies when the player gave a bare surname with NO first name or initial. If they gave a first name (even abbreviated or informal), accept or reject outright — do not ask for clarification. For bare surnames only: ask yourself whether that surname belongs to more than one distinct, well-known person in general knowledge. If yes, set needsClarification=true. Examples that always need clarification: "Roosevelt" (Theodore vs Franklin), "Kennedy" (John vs Robert), "Adams" (John vs John Quincy), "Johnson" (Andrew vs Lyndon), "Bush" (George H.W. vs George W.), "Brontë" (Charlotte vs Emily). Only accept a bare surname without clarification when it uniquely identifies one person (e.g. "Einstein", "Shakespeare", "Beyoncé").
 Return JSON with fields: "correct" (boolean), "needsClarification" (boolean), "message" (one sentence).`,
         },
         {
