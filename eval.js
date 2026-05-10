@@ -315,7 +315,35 @@ async function runDifficultyRatingTests() {
     suggestions.push(`Difficulty inversions in "${name}" — a lower-value clue was rated harder than a higher-value one.`);
   }
 
-  return { spread: high - low, inversions, suggestions };
+  // Absolute calibration check: $200 should be genuinely easy, $1000 genuinely hard
+  console.log(`\n  Absolute calibration:`);
+  let calibrationIssues = 0;
+  const calibrationClues = [data.clues[0], data.clues[4]].filter(Boolean); // $200 and $1000
+  for (const clue of calibrationClues) {
+    const isEasy = clue.value === 200;
+    let result;
+    try {
+      result = await gptRate(
+        isEasy
+          ? 'You are assessing whether a Jeopardy clue is genuinely easy. Assume the player is a reasonably educated adult with NO specialist knowledge in this subject — just general life knowledge. Would most such adults be able to answer this correctly? Be strict: if it requires any niche knowledge, hobby interest, or academic study, it is NOT easy. Return JSON: { "appropriatelyEasy": true|false, "reason": string }'
+          : 'You are assessing whether a Jeopardy clue is genuinely hard. Assume the player is a reasonably educated adult. Would this question stump most people who are not active experts or enthusiasts in this subject? If a casual fan or generally knowledgeable person could answer it, it is NOT hard enough for $1000. Return JSON: { "appropriatelyHard": true|false, "reason": string }',
+        `Clue: ${clue.clue}\nAnswer: ${clue.answer}`,
+      );
+    } catch { result = null; }
+
+    const ok = isEasy ? result?.appropriatelyEasy !== false : result?.appropriatelyHard !== false;
+    const label = isEasy ? '$200 easy enough' : '$1000 hard enough';
+    if (ok) {
+      console.log(pass(`  ${label}: ${clue.clue.slice(0, 60)}…`));
+    } else {
+      calibrationIssues++;
+      console.log(fail(`  ${label}: ${clue.clue.slice(0, 60)}…`));
+      if (result?.reason) console.log(`    ${Y(result.reason)}`);
+      suggestions.push(`Difficulty calibration issue in "${name}" $${clue.value}: ${result?.reason ?? 'clue may not be appropriately ' + (isEasy ? 'easy' : 'hard')}`);
+    }
+  }
+
+  return { spread: high - low, inversions, calibrationIssues, suggestions };
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1015,7 +1043,7 @@ async function main() {
   console.log(`  Clue leaks (sample): ${clueRes.leakCount ?? '?'}/${clueRes.totalClues ?? '?'}`);
   console.log(`  Clue leaks (board) : ${boardRes.totalLeaks ?? '?'}/30`);
   console.log(`  Board dupes        : ${boardRes.dupes ?? '?'} cross-category answer duplicate(s)`);
-  console.log(`  Clue difficulty    : spread ${diffRes.spread ?? '?'}/4, inversions ${diffRes.inversions ?? '?'}`);
+  console.log(`  Clue difficulty    : spread ${diffRes.spread ?? '?'}/4, inversions ${diffRes.inversions ?? '?'}, calibration issues ${diffRes.calibrationIssues ?? '?'}`);
   console.log(`  Category coherence : ${coherRes.passed ?? '?'}/${coherRes.total ?? '?'} clues on-topic`);
   console.log(`  Clue phrasing      : ${phrasingRes.passed ?? '?'}/${phrasingRes.total ?? '?'} correctly formatted`);
   console.log(`  Accuracy delta     : ${Math.round((calibRes.delta ?? 0) * 100)}pp  (90% vs 20% AI)`);
@@ -1046,8 +1074,9 @@ async function main() {
       clueLeaksSample:    { leaks: clueRes.leakCount,      total: clueRes.totalClues },
       clueLeaksFullBoard: { leaks: boardRes.totalLeaks,    total: boardRes.totalClues },
       crossCategoryDupes: boardRes.dupes,
-      difficultySpread:   diffRes.spread,
-      difficultyInversions: diffRes.inversions,
+      difficultySpread:        diffRes.spread,
+      difficultyInversions:    diffRes.inversions,
+      difficultyCalibration:   diffRes.calibrationIssues,
       categoryCoherence:  { passed: coherRes.passed,       total: coherRes.total },
       cluePhrasingValid:  { passed: phrasingRes.passed,    total: phrasingRes.total },
       accuracyDeltaPP:    Math.round((calibRes.delta ?? 0) * 100),
