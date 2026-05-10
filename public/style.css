@@ -19,6 +19,8 @@ body {
 
 /* ── Header ── */
 header {
+  position: relative;
+  z-index: 60;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -78,6 +80,38 @@ header {
   color: #778;
   margin-bottom: 8px;
 }
+
+#cheat-double-jeopardy {
+  background: var(--blue-main);
+  color: var(--gold);
+  border: 2px solid var(--gold);
+  padding: 12px 28px;
+  font-size: 1rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  letter-spacing: 1px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s, color 0.15s;
+}
+
+#cheat-double-jeopardy:hover { background: var(--gold); color: var(--black); }
+
+#cheat-final-jeopardy {
+  background: var(--blue-main);
+  color: var(--gold);
+  border: 2px solid var(--gold);
+  padding: 12px 28px;
+  font-size: 1rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  letter-spacing: 1px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s, color 0.15s;
+}
+
+#cheat-final-jeopardy:hover { background: var(--gold); color: var(--black); }
 
 #cheat-end-game {
   background: #8b0000;
@@ -829,3 +863,311 @@ h1 {
   background: var(--gold-light);
   transform: scale(1.04);
 }
+
+/* ── Double Jeopardy transition ── */
+#dj-transition {
+  position: fixed;
+  inset: 0;
+  background: var(--blue-dark);
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 80px 20px 20px;
+  animation: fj-fade-in 0.5s ease-out;
+}
+
+#dj-banner { font-size: clamp(2rem, 5vw, 3.2rem); }
+
+#dj-subtitle {
+  font-size: 1rem;
+  color: #aac4ff;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+#dj-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  min-width: 260px;
+}
+
+.dj-score-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 4px;
+  border-left: 3px solid transparent;
+}
+
+.dj-score-row.dj-last { border-left-color: var(--gold); }
+
+.dj-sr-name  { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; color: #aac4ff; }
+.dj-sr-score { font-size: 1.2rem; color: var(--gold); font-weight: 900; }
+
+/* ── Final Jeopardy ── */
+#fj-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--blue-dark);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px 20px;
+  overflow-y: auto;
+}
+
+.fj-phase {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.fj-logo {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  color: var(--gold);
+  letter-spacing: 6px;
+  text-shadow: 3px 3px 0 var(--black), 0 0 24px rgba(212,160,23,0.5);
+  animation: fj-glow 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes fj-glow {
+  from { text-shadow: 3px 3px 0 #000, 0 0 10px rgba(212,160,23,0.3); }
+  to   { text-shadow: 3px 3px 0 #000, 0 0 30px rgba(212,160,23,0.8); }
+}
+
+/* Phase 1: reveal */
+#fj-reveal-cat {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  color: var(--white);
+  text-align: center;
+  letter-spacing: 3px;
+  animation: fj-fade-in 0.7s ease-out;
+}
+
+#fj-reveal-sub {
+  font-size: 0.9rem;
+  color: #778;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+@keyframes fj-fade-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Phase 2: wager */
+#fj-wager-cat {
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  color: var(--gold-light);
+  text-align: center;
+  letter-spacing: 2px;
+}
+
+#fj-wager-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.fj-wager-card {
+  background: rgba(0,0,0,0.3);
+  border: 2px solid #2a3a80;
+  border-radius: 8px;
+  padding: 16px 22px;
+  text-align: center;
+  min-width: 140px;
+  transition: border-color 0.4s;
+}
+
+.fj-wager-card.human-card { border-color: #4466cc; }
+
+.fj-wager-card .wc-name  { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; color: #aac4ff; margin-bottom: 6px; }
+.fj-wager-card .wc-score { font-size: 1.5rem; color: var(--gold); font-weight: 900; margin-bottom: 10px; }
+.fj-wager-card .wc-wager { font-size: 0.95rem; color: #667; min-height: 1.4em; transition: color 0.3s; }
+.fj-wager-card .wc-wager.locked { color: var(--gold-light); }
+
+#fj-human-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+#fj-wager-instr {
+  font-size: 0.9rem;
+  color: #aac4ff;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+#fj-wager-input {
+  background: #020a70;
+  border: 2px solid var(--gold);
+  border-radius: 4px;
+  color: var(--white);
+  font-size: 1.4rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  padding: 10px 16px;
+  width: 200px;
+  text-align: center;
+}
+
+#fj-wager-input:focus { outline: none; border-color: var(--gold-light); }
+
+#fj-wager-btn {
+  background: var(--gold);
+  color: var(--black);
+  border: none;
+  padding: 14px 36px;
+  font-size: 1.1rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-weight: 900;
+  letter-spacing: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.08s;
+}
+
+#fj-wager-btn:hover { background: var(--gold-light); transform: scale(1.04); }
+
+/* Phase 3: clue */
+#fj-clue-cat {
+  font-size: 1rem;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  text-align: center;
+}
+
+#fj-clue-text {
+  font-size: clamp(1.1rem, 2.4vw, 1.6rem);
+  font-family: Arial, sans-serif;
+  font-weight: normal;
+  line-height: 1.6;
+  text-align: center;
+  max-width: 720px;
+  min-height: 4em;
+}
+
+#fj-clue-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 540px;
+}
+
+#fj-timer-track {
+  flex: 1;
+  height: 6px;
+  background: #1a2060;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#fj-timer-bar {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 3px;
+  transform-origin: left;
+  transform: scaleX(1);
+  will-change: transform;
+}
+
+#fj-timer-num {
+  font-size: 1.6rem;
+  color: var(--gold);
+  font-weight: 900;
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+#fj-clue-status {
+  font-size: 0.9rem;
+  color: #8899cc;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+#fj-clue-transcript {
+  font-size: 1.2rem;
+  font-style: italic;
+  color: #cce0ff;
+  min-height: 1.6em;
+  text-align: center;
+  max-width: 600px;
+  font-family: Arial, sans-serif;
+}
+
+/* Phase 4: answer reveal */
+#fj-answer-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+.fj-ans-card {
+  background: #020a60;
+  border: 2px solid #2a3a80;
+  border-radius: 8px;
+  padding: 18px 22px;
+  text-align: center;
+  min-width: 160px;
+  flex: 1 1 160px;
+  max-width: 200px;
+  transition: border-color 0.4s, transform 0.25s, box-shadow 0.25s;
+}
+
+.fj-ans-card.active {
+  border-color: var(--gold);
+  transform: scale(1.06);
+  box-shadow: 0 0 18px rgba(212,160,23,0.5);
+}
+
+.fj-ans-card.fj-correct { border-color: #4caf50; }
+.fj-ans-card.fj-wrong   { border-color: #e53935; }
+
+.fj-ans-card .ac-name   { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; color: #aac4ff; margin-bottom: 6px; }
+.fj-ans-card .ac-score  { font-size: 1.5rem; color: var(--gold); font-weight: 900; margin-bottom: 6px; transition: color 0.3s; }
+.fj-ans-card .ac-wager  { font-size: 0.8rem; color: #667; margin-bottom: 10px; }
+.fj-ans-card .ac-answer { font-size: 0.9rem; font-style: italic; color: #cce0ff; font-family: Arial, sans-serif; min-height: 2em; line-height: 1.4; }
+.fj-ans-card .ac-result { font-size: 1rem; font-weight: 900; margin-top: 8px; min-height: 1.4em; }
+
+#fj-answer-correct {
+  font-size: 1rem;
+  color: #aac4ff;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  min-height: 1.4em;
+}
+
+#fj-continue-btn {
+  background: var(--gold);
+  color: var(--black);
+  border: none;
+  padding: 16px 52px;
+  font-size: 1.2rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-weight: 900;
+  letter-spacing: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.08s;
+}
+
+#fj-continue-btn:hover { background: var(--gold-light); transform: scale(1.04); }

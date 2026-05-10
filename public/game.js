@@ -9,7 +9,10 @@ const TEST_CLUES = [
   { clue: 'This U.S. president, nicknamed "Old Hickory", is credited with founding the Democratic Party.', answer: 'Andrew Jackson'         },
 ];
 
-const VALUES        = [200, 400, 600, 800, 1000];
+const R1_VALUES     = [200, 400, 600, 800, 1000];
+const R2_VALUES     = [400, 800, 1200, 1600, 2000];
+let   VALUES        = R1_VALUES;
+let   currentRound  = 1;
 const CIRCUMFERENCE = 2 * Math.PI * 44;
 
 const SPEED_RANGES = {
@@ -18,7 +21,8 @@ const SPEED_RANGES = {
   slow:   { min: 2500, max: 5000, rebuzzMin: 1000, rebuzzMax: 2000 },
 };
 
-const AI_BUZZ_CHANCE = { 200: 0.97, 400: 0.88, 600: 0.72, 800: 0.55, 1000: 0.40 };
+// Indexed by tile position (vi), not dollar value — works for both R1 and R2
+const AI_BUZZ_CHANCE = [0.97, 0.88, 0.72, 0.55, 0.40];
 
 let PLAYERS         = [];
 let CATEGORIES      = [];
@@ -42,6 +46,12 @@ let clueHadCorrect   = false;
 
 let playerStats = [];
 let stumpedCount = 0;
+
+let fjCategory = '';
+let fjClue     = '';
+let fjAnswer   = '';
+let fjWagers   = [];
+let fjAnswers  = [];
 
 function initStats() {
   playerStats = PLAYERS.map(() => ({
@@ -393,7 +403,7 @@ function clueExpired() {
 function startAITimers() {
   aiTimers = [];
   const isRebuzz   = attemptedPlayers.size > 0;
-  const buzzChance = AI_BUZZ_CHANCE[VALUES[activeCell.vi]] ?? 0.7;
+  const buzzChance = AI_BUZZ_CHANCE[activeCell.vi] ?? 0.7;
   PLAYERS.forEach((player, playerIdx) => {
     if (player.isHuman) return;
     if (attemptedPlayers.has(playerIdx)) return;
@@ -860,7 +870,10 @@ continueBtn.addEventListener('click', () => {
   const controller = boardController;
   closeModal();
   const anyOpen = board.some(col => col.some(cell => cell.state === 'open'));
-  if (!anyOpen) { showBreakdown(); return; }
+  if (!anyOpen) {
+    if (currentRound === 1) { startDoubleJeopardy(); return; }
+    else                    { startFinalJeopardy();  return; }
+  }
   if (!PLAYERS[controller].isHuman) aiSelectTile(controller);
 });
 
@@ -908,6 +921,456 @@ function pickTile(strategy) {
 
   return open[Math.floor(Math.random() * open.length)];
 }
+
+// ── Double Jeopardy transition ──
+
+async function startDoubleJeopardy() {
+  // Record round 1 answers before the board is replaced
+  const r1Answers = board.flatMap(col => col.map(c => c.answer)).filter(Boolean);
+  if (r1Answers.length) fetch('/api/record-answers', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers: r1Answers }),
+  });
+
+  // Show transition screen with current standings
+  const djScoresEl = document.getElementById('dj-scores');
+  const lowestScore = Math.min(...scores);
+  djScoresEl.innerHTML = PLAYERS
+    .map((p, i) => ({ p, i, s: scores[i] }))
+    .sort((a, b) => b.s - a.s)
+    .map(({ p, i, s }) => `<div class="dj-score-row${s === lowestScore ? ' dj-last' : ''}">
+      <span class="dj-sr-name">${p.avatar ? p.avatar + ' ' : ''}${p.name}</span>
+      <span class="dj-sr-score">$${s.toLocaleString()}</span>
+    </div>`).join('');
+
+  document.getElementById('dj-transition').classList.remove('hidden');
+  await sleep(3800);
+  document.getElementById('dj-transition').classList.add('hidden');
+
+  // Switch to round 2
+  currentRound = 2;
+  VALUES = R2_VALUES;
+
+  // Last-place player controls the board
+  const minScore   = Math.min(...scores);
+  const lastPlaces = scores.map((s, i) => s === minScore ? i : -1).filter(i => i >= 0);
+  setController(lastPlaces[Math.floor(Math.random() * lastPlaces.length)]);
+
+  // Fetch new categories
+  let newCats = [], newDomains = [];
+  try {
+    const res  = await fetch('/api/categories');
+    const data = await res.json();
+    if (data.categories.length && typeof data.categories[0] === 'object') {
+      newCats    = data.categories.map(c => c.name);
+      newDomains = data.categories.map(c => c.domain || 'general');
+    } else {
+      newCats    = data.categories;
+      newDomains = data.categories.map(() => 'general');
+    }
+  } catch {
+    document.querySelector('#loading-inner p').textContent = 'Failed to load Round 2. Check server.';
+    return;
+  }
+
+  CATEGORIES      = newCats;
+  categoryDomains = newDomains;
+
+  board = CATEGORIES.map(() =>
+    VALUES.map(() => ({ clue: null, answer: null, state: 'loading' }))
+  );
+
+  buildBoard();
+  assignDailyDoubles();
+  stumpedCount = 0;
+
+  CATEGORIES.forEach((name, ci) => {
+    fetch('/api/category', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, round: 2 }),
+    })
+      .then(r => r.json())
+      .then(d => fillColumn(ci, d.clues))
+      .catch(() => setColumnError(ci));
+  });
+
+  if (!PLAYERS[boardController].isHuman) aiSelectTile(boardController);
+}
+
+// ── Final Jeopardy ──
+
+function showFJPhase(name) {
+  ['reveal', 'wager', 'clue', 'answers'].forEach(p =>
+    document.getElementById(`fj-phase-${p}`).classList.add('hidden')
+  );
+  document.getElementById(`fj-phase-${name}`).classList.remove('hidden');
+}
+
+function computeAIWager(playerIdx) {
+  const score    = scores[playerIdx];
+  const maxWager = Math.max(0, score);
+  if (maxWager === 0) return 0;
+
+  const rt = PLAYERS[playerIdx].riskTolerance || 'calculated';
+
+  if (rt === 'aggressive') {
+    return Math.round(maxWager * (0.8 + Math.random() * 0.2));
+  }
+  if (rt === 'conservative') {
+    return Math.round(maxWager * (0.1 + Math.random() * 0.2));
+  }
+  // calculated: strategic based on position
+  const otherScores  = scores.filter((_, i) => i !== playerIdx);
+  const maxOther     = Math.max(...otherScores);
+  if (score > maxOther) {
+    // In the lead — protect it conservatively
+    return Math.round(maxWager * (0.2 + Math.random() * 0.15));
+  }
+  // Trailing — need to wager enough to catch the leader
+  const deficit = maxOther - score;
+  return Math.min(maxWager, Math.max(deficit + 1, Math.round(maxWager * 0.7)));
+}
+
+async function startFinalJeopardy() {
+  fjWagers  = new Array(PLAYERS.length).fill(0);
+  fjAnswers = new Array(PLAYERS.length).fill('');
+
+  document.getElementById('fj-screen').classList.remove('hidden');
+  showFJPhase('reveal');
+  document.getElementById('fj-reveal-cat').textContent = '';
+  document.getElementById('fj-reveal-sub').textContent = 'Generating Final Jeopardy…';
+
+  try {
+    const res  = await fetch('/api/final-jeopardy');
+    const data = await res.json();
+    fjCategory = data.category || 'General Knowledge';
+    fjClue     = data.clue     || 'This question could not be loaded.';
+    fjAnswer   = data.answer   || '???';
+  } catch {
+    fjCategory = 'General Knowledge';
+    fjClue     = 'This question could not be loaded.';
+    fjAnswer   = '???';
+  }
+
+  showFJCategoryReveal();
+}
+
+async function showFJCategoryReveal() {
+  showFJPhase('reveal');
+  document.getElementById('fj-reveal-cat').textContent = fjCategory.toUpperCase();
+  document.getElementById('fj-reveal-sub').textContent = 'Prepare your wager…';
+  await sleep(3800);
+  showFJWager();
+}
+
+async function showFJWager() {
+  showFJPhase('wager');
+  document.getElementById('fj-wager-cat').textContent = fjCategory.toUpperCase();
+
+  // Pre-compute all AI wagers immediately (reveal is just animation)
+  PLAYERS.forEach((p, i) => { if (!p.isHuman) fjWagers[i] = computeAIWager(i); });
+
+  // Build player cards
+  const grid = document.getElementById('fj-wager-grid');
+  grid.innerHTML = '';
+  PLAYERS.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'fj-wager-card' + (p.isHuman ? ' human-card' : '');
+    card.id = `fj-wager-card-${i}`;
+    const label = p.avatar ? `${p.avatar} ${p.name}` : p.name;
+    card.innerHTML = `
+      <div class="wc-name">${label}</div>
+      <div class="wc-score">$${scores[i].toLocaleString()}</div>
+      <div class="wc-wager" id="fj-wc-${i}">${p.isHuman ? '' : 'Wagering…'}</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Human wager form
+  const humanIdx  = PLAYERS.findIndex(p => p.isHuman);
+  const maxWager  = Math.max(0, scores[humanIdx]);
+  const instrEl   = document.getElementById('fj-wager-instr');
+  const formEl    = document.getElementById('fj-human-form');
+  const inputEl   = document.getElementById('fj-wager-input');
+
+  if (maxWager === 0) {
+    fjWagers[humanIdx] = 0;
+    instrEl.textContent = 'Your score is $0 — your wager is locked at $0.';
+    inputEl.closest && formEl.querySelector('input, button') && null;
+    formEl.querySelector('#fj-wager-btn').disabled = true;
+    inputEl.disabled = true;
+    inputEl.value = 0;
+  } else {
+    instrEl.textContent = `Wager between $0 and $${maxWager.toLocaleString()}`;
+    inputEl.max   = maxWager;
+    inputEl.min   = 0;
+    inputEl.value = '';
+    inputEl.disabled = false;
+    document.getElementById('fj-wager-btn').disabled = false;
+    inputEl.focus();
+  }
+
+  // Animate AI wager reveals in background (don't await — human form stays active)
+  revealAIWagers();
+
+  // If human has $0, auto-proceed after AIs finish revealing
+  if (maxWager === 0) {
+    await sleep(PLAYERS.filter(p => !p.isHuman).length * 1200 + 600);
+    showFJClue();
+  }
+}
+
+async function revealAIWagers() {
+  for (let i = 0; i < PLAYERS.length; i++) {
+    if (PLAYERS[i].isHuman) continue;
+    await sleep(900 + Math.random() * 700);
+    const el = document.getElementById(`fj-wc-${i}`);
+    if (el) {
+      el.textContent = '✓ Locked in';
+      el.classList.add('locked');
+    }
+  }
+}
+
+async function showFJClue() {
+  showFJPhase('clue');
+  document.getElementById('fj-clue-cat').textContent      = fjCategory.toUpperCase();
+  document.getElementById('fj-clue-text').textContent     = '';
+  document.getElementById('fj-clue-status').textContent   = '';
+  document.getElementById('fj-clue-transcript').textContent = '';
+
+  // Fire off all AI answer requests in parallel now — they'll be ready before the 30s is up
+  const aiAnswerPromises = PLAYERS.map((p, i) => {
+    if (p.isHuman) return Promise.resolve('');
+    return fetch('/api/ai-answer', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        clue:        fjClue,
+        category:    fjCategory,
+        value:       1000,
+        accuracy:    p.accuracy    ?? 1.0,
+        domain:      'general',
+        specialties: p.specialties ?? {},
+      }),
+    }).then(r => r.json()).then(d => d.answer || '').catch(() => '');
+  });
+
+  // Reveal clue text with typing animation
+  await new Promise(resolve => {
+    const text  = fjClue;
+    const el    = document.getElementById('fj-clue-text');
+    el.textContent = text;
+    el.style.minHeight = el.offsetHeight + 'px';
+    el.textContent = '';
+    let i = 0;
+    const iv = setInterval(() => {
+      el.textContent = text.slice(0, ++i);
+      if (i >= text.length) { clearInterval(iv); resolve(); }
+    }, MS_PER_CHAR);
+  });
+
+  // Start 30-second countdown
+  const FINAL_MS    = 30000;
+  const timerBar    = document.getElementById('fj-timer-bar');
+  const timerNum    = document.getElementById('fj-timer-num');
+  const statusEl    = document.getElementById('fj-clue-status');
+  const transcriptEl = document.getElementById('fj-clue-transcript');
+
+  timerBar.style.transition = 'none';
+  timerBar.style.transform  = 'scaleX(1)';
+  timerBar.offsetHeight;
+  timerBar.style.transition = `transform ${FINAL_MS}ms linear`;
+  timerBar.style.transform  = 'scaleX(0)';
+
+  let humanAnswer = '';
+  const humanIdx  = PLAYERS.findIndex(p => p.isHuman);
+
+  // Start speech recognition for human
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  if (SpeechRecognition) {
+    statusEl.textContent = '🎤 Listening for your answer…';
+    recognition = new SpeechRecognition();
+    recognition.continuous     = true;
+    recognition.interimResults = true;
+    recognition.lang           = 'en-US';
+    recognition.onresult = e => {
+      let final = '', interim = '';
+      for (let j = 0; j < e.results.length; j++) {
+        if (e.results[j].isFinal) final  += e.results[j][0].transcript;
+        else                       interim += e.results[j][0].transcript;
+      }
+      humanAnswer = final || interim;
+      transcriptEl.textContent = humanAnswer;
+    };
+    recognition.onerror = e => { if (e.error !== 'no-speech') console.warn('FJ speech:', e.error); };
+    recognition.start();
+  } else {
+    statusEl.textContent = 'Speech unavailable — answer will be blank.';
+  }
+
+  // Countdown ticker
+  let secondsLeft = 30;
+  timerNum.textContent = secondsLeft;
+  const countdownIv = setInterval(() => {
+    secondsLeft--;
+    timerNum.textContent = Math.max(0, secondsLeft);
+    if (secondsLeft <= 0) clearInterval(countdownIv);
+  }, 1000);
+
+  await sleep(FINAL_MS);
+
+  clearInterval(countdownIv);
+  if (recognition) { try { recognition.stop(); } catch {} }
+
+  fjAnswers[humanIdx] = humanAnswer;
+  statusEl.textContent = humanAnswer
+    ? `Answer locked in: "${humanAnswer}"`
+    : 'No answer recorded.';
+
+  // Collect all AI answers (should already be resolved)
+  const aiResults = await Promise.all(aiAnswerPromises);
+  PLAYERS.forEach((p, i) => { if (!p.isHuman) fjAnswers[i] = aiResults[i]; });
+
+  await sleep(1200);
+  showFJReveal();
+}
+
+async function showFJReveal() {
+  showFJPhase('answers');
+  document.getElementById('fj-answer-correct').textContent = '';
+  document.getElementById('fj-continue-btn').classList.add('hidden');
+
+  const cardsEl = document.getElementById('fj-answer-cards');
+  cardsEl.innerHTML = '';
+
+  // Lowest score first for maximum drama
+  const order = PLAYERS.map((_, i) => i).sort((a, b) => scores[a] - scores[b]);
+
+  // Create all cards up front
+  order.forEach(pi => {
+    const p    = PLAYERS[pi];
+    const card = document.createElement('div');
+    card.className = 'fj-ans-card';
+    card.id        = `fj-ans-${pi}`;
+    const label    = p.avatar ? `${p.avatar} ${p.name}` : p.name;
+    card.innerHTML = `
+      <div class="ac-name">${label}</div>
+      <div class="ac-score" id="fj-score-${pi}">$${scores[pi].toLocaleString()}</div>
+      <div class="ac-wager">Wagered $${fjWagers[pi].toLocaleString()}</div>
+      <div class="ac-answer" id="fj-ans-text-${pi}">?</div>
+      <div class="ac-result" id="fj-ans-result-${pi}"></div>
+    `;
+    cardsEl.appendChild(card);
+  });
+
+  await sleep(600);
+
+  for (const pi of order) {
+    const card     = document.getElementById(`fj-ans-${pi}`);
+    const answerEl = document.getElementById(`fj-ans-text-${pi}`);
+    const resultEl = document.getElementById(`fj-ans-result-${pi}`);
+    const scoreEl  = document.getElementById(`fj-score-${pi}`);
+
+    card.classList.add('active');
+    await sleep(500);
+
+    // Reveal answer
+    const spoken = fjAnswers[pi] || '';
+    answerEl.textContent = spoken ? `"${spoken}"` : '(no answer)';
+    await sleep(1500);
+
+    // Judge the answer
+    let correct = false;
+    if (spoken) {
+      try {
+        const res  = await fetch('/api/judge', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ clue: fjClue, correctAnswer: fjAnswer, playerAnswer: spoken }),
+        });
+        const data = await res.json();
+        correct = !!data.correct;
+      } catch { correct = false; }
+    }
+
+    const wager = fjWagers[pi];
+    const delta = correct ? wager : -wager;
+
+    resultEl.textContent = correct
+      ? `✅ +$${wager.toLocaleString()}`
+      : wager > 0 ? `❌ -$${wager.toLocaleString()}` : `❌`;
+
+    card.classList.remove('active');
+    card.classList.add(correct ? 'fj-correct' : 'fj-wrong');
+
+    if (wager > 0) {
+      updateScore(pi, delta);
+      scoreEl.textContent = `$${scores[pi].toLocaleString()}`;
+      scoreEl.style.color = scores[pi] < 0 ? '#ff6666' : '';
+    }
+
+    // Update stats
+    const s = playerStats[pi];
+    s.attempts++;
+    if (correct) {
+      s.correct++;
+      s.currentStreak++;
+      s.longestStreak = Math.max(s.longestStreak, s.currentStreak);
+      s.biggestWin    = Math.max(s.biggestWin, wager);
+    } else {
+      s.currentStreak = 0;
+      s.biggestLoss   = Math.max(s.biggestLoss, wager);
+    }
+
+    await sleep(1000);
+  }
+
+  // Record FJ answer to avoid repeating it
+  fetch('/api/record-answers', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ answers: [fjAnswer] }),
+  });
+
+  document.getElementById('fj-answer-correct').textContent = `Correct answer: ${fjAnswer}`;
+  await sleep(600);
+  document.getElementById('fj-continue-btn').classList.remove('hidden');
+}
+
+document.getElementById('fj-wager-btn').addEventListener('click', () => {
+  const humanIdx = PLAYERS.findIndex(p => p.isHuman);
+  const maxWager = Math.max(0, scores[humanIdx]);
+  let wager = parseInt(document.getElementById('fj-wager-input').value, 10);
+  if (isNaN(wager) || wager < 0) wager = 0;
+  if (wager > maxWager) wager = maxWager;
+  fjWagers[humanIdx] = wager;
+
+  const wagerEl = document.getElementById(`fj-wc-${humanIdx}`);
+  if (wagerEl) { wagerEl.textContent = `$${wager.toLocaleString()} ✓`; wagerEl.classList.add('locked'); }
+  document.getElementById('fj-human-form').style.visibility = 'hidden';
+
+  setTimeout(showFJClue, 600);
+});
+
+document.getElementById('fj-wager-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('fj-wager-btn').click();
+});
+
+document.getElementById('fj-wager-input').addEventListener('input', () => {
+  const input = document.getElementById('fj-wager-input');
+  const max   = parseInt(input.max, 10);
+  const val   = parseInt(input.value, 10);
+  if (!isNaN(val) && !isNaN(max) && val > max) input.value = max;
+  if (!isNaN(val) && val < 0) input.value = 0;
+});
+
+document.getElementById('fj-continue-btn').addEventListener('click', () => {
+  document.getElementById('fj-screen').classList.add('hidden');
+  showBreakdown();
+});
 
 // ── Post-game breakdown ──
 function showBreakdown() {
@@ -997,6 +1460,21 @@ function closeCheat() {
 
 document.getElementById('cheat-close').addEventListener('click', closeCheat);
 document.getElementById('cheat-overlay').addEventListener('click', closeCheat);
+
+document.getElementById('cheat-double-jeopardy').addEventListener('click', () => {
+  closeCheat();
+  if (activeCell) closeModal();
+  board.forEach(col => col.forEach(cell => { if (cell.state !== 'done') cell.state = 'done'; }));
+  startDoubleJeopardy();
+});
+
+document.getElementById('cheat-final-jeopardy').addEventListener('click', () => {
+  closeCheat();
+  if (activeCell) closeModal();
+  board.forEach(col => col.forEach(cell => { if (cell.state !== 'done') cell.state = 'done'; }));
+  PLAYERS.forEach((_, i) => updateScore(i, Math.floor(Math.random() * 5001)));
+  startFinalJeopardy();
+});
 
 document.getElementById('cheat-end-game').addEventListener('click', () => {
   closeCheat();

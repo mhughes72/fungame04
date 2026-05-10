@@ -120,9 +120,39 @@ function answerLeaksIntoClue(clue, answer) {
   return answerWords.some(aw => clueWords.some(cw => aw === cw || aw.includes(cw) || cw.includes(aw)));
 }
 
+async function rewriteLeakingClue(clue) {
+  const completion = await client.chat.completions.create({
+    model: 'gpt-4o',
+    max_tokens: 200,
+    temperature: 0.9,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: 'You are a Jeopardy clue writer. Rewrite the given clue so that no word from the answer (3+ letters, ignoring articles/prepositions) appears anywhere in the clue text. Keep the same answer, category feel, and difficulty. Return JSON only.' },
+      { role: 'user',   content: `Answer: "${clue.answer}"\nLeaking clue: "${clue.clue}"\n\nReturn JSON: { "clue": "rewritten clue here" }` },
+    ],
+  });
+  const result = JSON.parse(completion.choices[0].message.content);
+  return { ...clue, clue: result.clue };
+}
+
+async function factCheckClue(clue) {
+  const completion = await client.chat.completions.create({
+    model: 'gpt-4o',
+    max_tokens: 200,
+    temperature: 0.2,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: 'You are a fact-checker for a single Jeopardy clue. Verify every factual claim: nationalities, dates, record counts, event descriptions, attributions, language families, scientific classifications. UNCERTAINTY RULE: if a claim would not clearly appear in a mainstream encyclopedia — even if it sounds plausible — rewrite the clue to use only well-established, widely-known facts about the answer instead. It is better to rewrite than to leave a dubious claim in. If every claim is clearly correct, return it unchanged. Return JSON only.' },
+      { role: 'user',   content: `Clue: "${clue.clue}"\nAnswer: "${clue.answer}"\n\nReturn JSON: { "clue": "verified or corrected clue", "changed": true|false }` },
+    ],
+  });
+  const result = JSON.parse(completion.choices[0].message.content);
+  return { ...clue, clue: result.clue };
+}
+
 // Step 2: generate all 5 clues for one category
 app.post('/api/category', async (req, res) => {
-  const { name } = req.body;
+  const { name, round = 1 } = req.body;
   if (!name) return res.status(400).json({ error: 'Missing name' });
 
   const makeRequest = () => client.chat.completions.create({
@@ -134,7 +164,9 @@ app.post('/api/category', async (req, res) => {
       {
         role: 'system',
         content: `You are a Jeopardy clue writer. Rules:
-- Difficulty must escalate clearly: $200 = widely known fact any adult would know; $400 = common knowledge; $600 = requires some study; $800 = requires dedicated interest in the subject; $1000 = specialist/obscure knowledge that only an expert would know. A $1000 clue should be genuinely hard — avoid famous names or well-known works at that value.
+${round === 2
+  ? '- This is Double Jeopardy. All clues should skew harder than a standard round. $400 = requires some study; $800 = requires dedicated interest; $1200 = specialist knowledge; $1600 = expert-level; $2000 = only a true authority would know this. Avoid anything a casual fan of the subject would know.'
+  : '- Difficulty must escalate clearly: $200 = widely known fact any adult would know; $400 = common knowledge; $600 = requires some study; $800 = requires dedicated interest in the subject; $1000 = specialist/obscure knowledge that only an expert would know. A $1000 clue should be genuinely hard — avoid famous names or well-known works at that value.'}
 - The answer must NEVER appear in the clue text. Before writing each clue, list every word in the answer that is 3+ letters and not an article/preposition — then check none of those words appear anywhere in the clue, including partial matches. This is a hard rule with no exceptions.
   BAD (leaks): Answer is "The Silk Road". Clue: "Ancient traders travelled this overland road connecting China to Europe." — "road" is in the answer.
   GOOD rewrite: "Ancient traders used this network of overland routes linking China to the Mediterranean, carrying spices and textiles." — no word from "Silk Road" appears.
@@ -151,48 +183,20 @@ Return JSON only.`,
           const avoidClause = usedAnswers.length
             ? `\nDo NOT use any of these recently used answers: ${usedAnswers.slice(-30).join(', ')}.`
             : '';
-          return `Write 5 Jeopardy clues for the category "${name}" at values $200, $400, $600, $800, $1000.${avoidClause} Return JSON:
+          const valueList = round === 2 ? '$400, $800, $1200, $1600, $2000' : '$200, $400, $600, $800, $1000';
+          const clueValues = round === 2 ? [400, 800, 1200, 1600, 2000] : [200, 400, 600, 800, 1000];
+          return `Write 5 Jeopardy clues for the category "${name}" at values ${valueList}.${avoidClause} Return JSON:
 { "clues": [
-  { "value": 200,  "clue": "...", "answer": "..." },
-  { "value": 400,  "clue": "...", "answer": "..." },
-  { "value": 600,  "clue": "...", "answer": "..." },
-  { "value": 800,  "clue": "...", "answer": "..." },
-  { "value": 1000, "clue": "...", "answer": "..." }
+  { "value": ${clueValues[0]}, "clue": "...", "answer": "..." },
+  { "value": ${clueValues[1]}, "clue": "...", "answer": "..." },
+  { "value": ${clueValues[2]}, "clue": "...", "answer": "..." },
+  { "value": ${clueValues[3]}, "clue": "...", "answer": "..." },
+  { "value": ${clueValues[4]}, "clue": "...", "answer": "..." }
 ] }`;
         })(),
       },
     ],
   });
-
-  const rewriteLeakingClue = async (clue) => {
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o',
-      max_tokens: 200,
-      temperature: 0.9,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: 'You are a Jeopardy clue writer. Rewrite the given clue so that no word from the answer (3+ letters, ignoring articles/prepositions) appears anywhere in the clue text. Keep the same answer, category feel, and difficulty. Return JSON only.' },
-        { role: 'user',   content: `Answer: "${clue.answer}"\nLeaking clue: "${clue.clue}"\n\nReturn JSON: { "clue": "rewritten clue here" }` },
-      ],
-    });
-    const result = JSON.parse(completion.choices[0].message.content);
-    return { ...clue, clue: result.clue };
-  };
-
-  const factCheckClue = async (clue) => {
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o',
-      max_tokens: 200,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: 'You are a fact-checker for a single Jeopardy clue. Verify every factual claim: nationalities, dates, record counts, event descriptions, attributions, language families, scientific classifications. UNCERTAINTY RULE: if a claim would not clearly appear in a mainstream encyclopedia — even if it sounds plausible — rewrite the clue to use only well-established, widely-known facts about the answer instead. It is better to rewrite than to leave a dubious claim in. If every claim is clearly correct, return it unchanged. Return JSON only.' },
-        { role: 'user',   content: `Clue: "${clue.clue}"\nAnswer: "${clue.answer}"\n\nReturn JSON: { "clue": "verified or corrected clue", "changed": true|false }` },
-      ],
-    });
-    const result = JSON.parse(completion.choices[0].message.content);
-    return { ...clue, clue: result.clue };
-  };
 
   try {
     const completion = await makeRequest();
@@ -218,6 +222,49 @@ Return JSON only.`,
     res.json({ clues });
   } catch (err) {
     console.error(`Category "${name}" error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate one Final Jeopardy clue
+app.get('/api/final-jeopardy', async (req, res) => {
+  try {
+    const usedAnswers    = loadUsedAnswers();
+    const usedCategories = loadUsedCategories();
+    const avoidAnswers   = usedAnswers.length
+      ? `\nDo NOT use any of these recently used answers: ${usedAnswers.slice(-30).join(', ')}.`
+      : '';
+    const avoidCategories = usedCategories.length
+      ? `\nDo NOT reuse or closely overlap with these recent category themes: ${usedCategories.slice(-30).join(', ')}.`
+      : '';
+
+    const completion = await client.chat.completions.create({
+      model: 'gpt-4o',
+      max_tokens: 300,
+      temperature: 0.9,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'You are a Final Jeopardy clue writer. Return JSON only.' },
+        { role: 'user',   content: `Generate one Final Jeopardy category and clue. Final Jeopardy clues are harder than regular $1000 clues — they require broad but deep knowledge, are unambiguous, and are well-known enough that a well-read adult has a real chance. Choose a broad, prestigious category (e.g. "American History", "World Literature", "Science & Nature", "Classic Films") rather than niche. The answer must NEVER appear in the clue text. Every factual claim must be encyclopedically verifiable — apply the Wikipedia standard.${avoidAnswers}${avoidCategories} Return JSON: { "category": "...", "clue": "...", "answer": "..." }` },
+      ],
+    });
+
+    let fj = JSON.parse(completion.choices[0].message.content);
+
+    // Fact-check
+    try { fj = { ...fj, ...(await factCheckClue(fj)) }; }
+    catch (e) { console.warn('FJ fact-check failed:', e.message); }
+
+    // Leak check with up to 5 rewrites
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (!answerLeaksIntoClue(fj.clue, fj.answer)) break;
+      try { const r = await rewriteLeakingClue(fj); fj.clue = r.clue; }
+      catch { break; }
+    }
+
+    res.json(fj);
+  } catch (err) {
+    console.error('Final Jeopardy error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

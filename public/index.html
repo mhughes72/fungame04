@@ -17,6 +17,8 @@
   <div id="cheat-modal" class="hidden">
     <div id="cheat-inner">
       <div id="cheat-title">Cheat Codes</div>
+      <button id="cheat-double-jeopardy">Skip to Double Jeopardy</button>
+      <button id="cheat-final-jeopardy">Skip to Final Jeopardy</button>
       <button id="cheat-end-game">End Game Now</button>
       <button id="cheat-close">Close</button>
     </div>
@@ -118,6 +120,57 @@
   </div>
 
   <div id="game-over" class="hidden"></div>
+
+  <!-- Double Jeopardy transition -->
+  <div id="dj-transition" class="hidden">
+    <div class="fj-logo" id="dj-banner">DOUBLE JEOPARDY!</div>
+    <div id="dj-subtitle">Values are now doubled</div>
+    <div id="dj-scores"></div>
+  </div>
+
+  <!-- Final Jeopardy -->
+  <div id="fj-screen" class="hidden">
+
+    <!-- Phase 1: loading / category reveal -->
+    <div id="fj-phase-reveal" class="fj-phase">
+      <div class="fj-logo">FINAL JEOPARDY!</div>
+      <div id="fj-reveal-cat"></div>
+      <div id="fj-reveal-sub"></div>
+    </div>
+
+    <!-- Phase 2: wager -->
+    <div id="fj-phase-wager" class="fj-phase hidden">
+      <div class="fj-logo">FINAL JEOPARDY!</div>
+      <div id="fj-wager-cat"></div>
+      <div id="fj-wager-grid"></div>
+      <div id="fj-human-form">
+        <p id="fj-wager-instr"></p>
+        <input type="number" id="fj-wager-input" placeholder="Your wager" min="0" />
+        <button id="fj-wager-btn">Lock In Wager</button>
+      </div>
+    </div>
+
+    <!-- Phase 3: clue + listening -->
+    <div id="fj-phase-clue" class="fj-phase hidden">
+      <div id="fj-clue-cat"></div>
+      <div id="fj-clue-text"></div>
+      <div id="fj-clue-timer-row">
+        <div id="fj-timer-track"><div id="fj-timer-bar"></div></div>
+        <span id="fj-timer-num">30</span>
+      </div>
+      <div id="fj-clue-status"></div>
+      <div id="fj-clue-transcript"></div>
+    </div>
+
+    <!-- Phase 4: answer reveal -->
+    <div id="fj-phase-answers" class="fj-phase hidden">
+      <div class="fj-logo">FINAL JEOPARDY!</div>
+      <div id="fj-answer-cards"></div>
+      <div id="fj-answer-correct"></div>
+      <button id="fj-continue-btn" class="hidden">See Final Scores</button>
+    </div>
+
+  </div>
 
   <script src="game.js"></script>
 </body>

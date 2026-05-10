@@ -40,20 +40,40 @@ PLAYERS="HAL 9000,Deep Blue" node server.js
 
 ## Gameplay
 
+A full game runs three rounds: Jeopardy, Double Jeopardy, and Final Jeopardy.
+
 - The board controller selects a tile. AIs select automatically based on their strategy.
 - Once the clue finishes printing, buzz in with the **BUZZ IN** button and speak your answer. You have 5 seconds.
 - If your answer is ambiguous (e.g. a surname that could match multiple people) you'll be asked to be more specific.
 - AIs buzz in on a timer based on their speed. Multiple players can attempt the same clue if the first answer is wrong.
 - Correct answers award the tile value; wrong answers deduct it. Scores can go negative.
 
+## Double Jeopardy
+
+After the first board is cleared, the game transitions to Double Jeopardy:
+
+- A fresh board of 6 categories is generated with doubled values ($400–$2000).
+- Clues are harder — the easiest Double Jeopardy clue requires study; the $2000 clue is expert-level.
+- The player in last place controls the board at the start of the round.
+- Two Daily Doubles are reassigned to the new board.
+
 ## Daily Double
 
-Two random tiles per game are Daily Doubles (hidden until revealed).
+Two random tiles per round are Daily Doubles (hidden until revealed).
 
 - Only the player who selected the tile gets to answer — others watch.
-- Before the clue appears, you wager between $1 and your current score (minimum $1,000 if your score is below that).
+- Before the clue appears, you wager between $0 and your current score.
 - The clue then reveals and the 5-second answer timer starts automatically — no buzzing required.
 - Win the wager on a correct answer, lose it on a wrong one.
+
+## Final Jeopardy
+
+After Double Jeopardy, all players compete in one final clue:
+
+- A single broad category (e.g. "American History", "World Literature") is revealed — all clues are harder than a regular $1000 clue.
+- All players place their wagers secretly. AI wagers are computed using each player's `riskTolerance` setting but kept hidden until the reveal.
+- The clue appears and a 30-second timer runs. The human answers by voice; AIs answer simultaneously in the background.
+- Answers are revealed one by one, lowest score first. Each answer is judged and scores updated before moving to the next player.
 
 ## AI Players
 
@@ -78,13 +98,13 @@ Each AI has a distinct personality defined in `public/players.json`:
 | `speed` | string | `fast` `medium` `slow` | How quickly the AI buzzes in. `fast` ≈ 1–2s, `medium` ≈ 2–4s, `slow` ≈ 4–6s after the clue finishes. |
 | `accuracy` | number | 0.0–1.0 | Base probability of answering correctly on a neutral clue. Modified by `specialties` per domain. A value of `1.0` means the AI will answer correctly unless the clue is very hard. |
 | `specialties` | object | multipliers per domain | Per-domain accuracy multipliers applied on top of `accuracy`. `1.0` = no change; `>1.0` = boosted; `<1.0` = weakened. Available domains: `science`, `history`, `popculture`, `sports`, `arts`, `geography`, `food`, `general`. Example: `"science": 1.5` means the AI is 50% more likely to answer science questions correctly. |
-| `riskTolerance` | string | `aggressive` `conservative` `calculated` | *(not yet active)* Daily Double wagering style. `aggressive` = wager high; `conservative` = wager low; `calculated` = wager based on score position. |
+| `riskTolerance` | string | `aggressive` `conservative` `calculated` | Final Jeopardy wagering style. `aggressive` = wager 80–100% of score; `conservative` = wager 10–30%; `calculated` = wager defensively when leading, aggressively when trailing. |
 | `buzzAggressiveness` | number | 0.0–2.0 | *(not yet active)* Multiplier on per-question buzz probability. `1.0` = default; `2.0` = buzzes on nearly everything; `0.5` = much more selective. |
 | `reactionVoice` | string | `clinical` `snarky` `warm` `dramatic` | *(not yet active)* Tone of the AI's result message feedback shown after answers. |
 
 ## Post-Game Breakdown
 
-After the last tile is answered (or via the Cheat menu), a breakdown screen shows:
+After Final Jeopardy, a breakdown screen shows:
 
 - Final scores and winner
 - Each player's correct/attempt count and accuracy %
@@ -94,8 +114,10 @@ After the last tile is answered (or via the Cheat menu), a breakdown screen show
 
 ## Cheat Menu
 
-A **Cheat** button in the top-right header opens a menu with developer shortcuts:
+A **Cheat** button in the top-right header is always accessible, even when a modal is open. It provides developer shortcuts:
 
+- **Skip to Double Jeopardy** — marks all round 1 tiles done and jumps straight to the Double Jeopardy transition
+- **Skip to Final Jeopardy** — awards each player a random $0–$5,000 bonus, then jumps to Final Jeopardy
 - **End Game Now** — immediately triggers the post-game breakdown with current scores
 
 ## Clue Quality
