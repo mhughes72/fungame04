@@ -30,7 +30,18 @@
     <div id="board"></div>
   </main>
 
-  <div id="loading-screen">
+  <!-- Player Selection Modal -->
+  <div id="player-select-overlay"></div>
+  <div id="player-select-modal">
+    <div id="player-select-inner">
+      <div id="player-select-title">CHOOSE YOUR OPPONENTS</div>
+      <p id="player-select-subtitle">Select exactly 2 AI players to compete against</p>
+      <div id="player-select-grid"></div>
+      <button id="player-select-start" disabled>Start Game</button>
+    </div>
+  </div>
+
+  <div id="loading-screen" class="hidden">
     <div id="loading-inner">
       <div class="spinner"></div>
       <p>Generating board…</p>

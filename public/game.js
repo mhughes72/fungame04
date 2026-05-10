@@ -131,8 +131,13 @@ function buildScoreboard() {
     const card = document.createElement('div');
     card.className = 'player-card' + (p.isHuman ? ' human' : '');
     card.id = `player-card-${i}`;
-    const label = p.avatar ? `${p.avatar} ${p.name}` : p.name;
-    card.innerHTML = `<div class="player-name">${label}</div><div class="player-score" id="pscore-${i}">$0</div><div class="turn-label">▶ your turn</div>`;
+    if (!p.isHuman) {
+      const avatarDiv = document.createElement('div');
+      avatarDiv.className = 'player-avatar';
+      avatarDiv.appendChild(playerImgEl(p, 'player-avatar-img'));
+      card.appendChild(avatarDiv);
+    }
+    card.insertAdjacentHTML('beforeend', `<div class="player-name">${p.name}</div><div class="player-score" id="pscore-${i}">$0</div><div class="turn-label">▶ your turn</div>`);
     sb.appendChild(card);
     scoreEls.push(card.querySelector('.player-score'));
   });
@@ -154,15 +159,82 @@ function refreshLeader() {
   });
 }
 
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function playerImgEl(player, className) {
+  const img = document.createElement('img');
+  img.className = className;
+  img.src = `/images/players/${slugify(player.name)}.png`;
+  img.alt = player.name;
+  img.onerror = () => {
+    const span = document.createElement('span');
+    span.textContent = player.avatar || '🤖';
+    img.replaceWith(span);
+  };
+  return img;
+}
+
+// ── Player selection modal ──
+async function showPlayerSelect() {
+  const allPlayers = await fetch('/api/players').then(r => r.json());
+  const aiPlayers  = allPlayers.filter(p => !p.isHuman);
+
+  const grid      = document.getElementById('player-select-grid');
+  const startBtn  = document.getElementById('player-select-start');
+  const selected  = new Set();
+
+  aiPlayers.forEach(p => {
+    const card = document.createElement('div');
+    card.className  = 'ps-card';
+    card.dataset.name = p.name;
+
+    const speedLabel = { fast: 'Fast', medium: 'Medium', slow: 'Slow' }[p.speed] || p.speed;
+    const pct        = Math.round(p.accuracy * 100);
+
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'ps-avatar';
+    avatarDiv.appendChild(playerImgEl(p, 'ps-avatar-img'));
+
+    card.appendChild(avatarDiv);
+    card.insertAdjacentHTML('beforeend', `
+      <div class="ps-name">${p.name}</div>
+      <div class="ps-stats">${speedLabel} · ${pct}% accuracy</div>`);
+
+    card.addEventListener('click', () => {
+      if (selected.has(p.name)) {
+        selected.delete(p.name);
+        card.classList.remove('ps-selected');
+      } else if (selected.size < 2) {
+        selected.add(p.name);
+        card.classList.add('ps-selected');
+      }
+      startBtn.disabled = selected.size !== 2;
+    });
+
+    grid.appendChild(card);
+  });
+
+  return new Promise(resolve => {
+    startBtn.addEventListener('click', () => {
+      document.getElementById('player-select-overlay').classList.add('hidden');
+      document.getElementById('player-select-modal').classList.add('hidden');
+      document.getElementById('loading-screen').classList.remove('hidden');
+
+      const humanPlayer = allPlayers.find(p => p.isHuman);
+      const chosenAIs   = aiPlayers.filter(p => selected.has(p.name));
+      resolve([humanPlayer, ...chosenAIs]);
+    });
+  });
+}
+
 // ── Init ──
 async function init() {
   try {
-    const [playersRes, categoriesRes] = await Promise.all([
-      fetch('/api/players'),
-      fetch('/api/categories'),
-    ]);
+    PLAYERS = await showPlayerSelect();
 
-    PLAYERS    = await playersRes.json();
+    const categoriesRes = await fetch('/api/categories');
     const cats = await categoriesRes.json();
     // Support both old string[] and new {name, domain}[] format
     if (cats.categories.length && typeof cats.categories[0] === 'object') {
@@ -224,23 +296,58 @@ function applyTestClues() {
 // ── Board ──
 function buildBoard() {
   boardEl.innerHTML = '';
-  CATEGORIES.forEach(cat => {
+
+  CATEGORIES.forEach((cat, ci) => {
+    const col = document.createElement('div');
+    col.className = 'category-col';
+    col.dataset.ci = ci;
+
     const h = document.createElement('div');
     h.className = 'cat-header';
     h.textContent = cat;
-    boardEl.appendChild(h);
-  });
+    col.appendChild(h);
 
-  VALUES.forEach((_, vi) => {
-    CATEGORIES.forEach((__, ci) => {
+    VALUES.forEach((_, vi) => {
       const cell = document.createElement('div');
       cell.className = 'clue-cell loading';
       cell.dataset.ci = ci;
       cell.dataset.vi = vi;
       cell.addEventListener('click', onCellClick);
-      boardEl.appendChild(cell);
+      col.appendChild(cell);
     });
+
+    boardEl.appendChild(col);
   });
+
+  buildMobileDots();
+}
+
+function buildMobileDots() {
+  const existing = document.getElementById('board-dots');
+  if (existing) existing.remove();
+
+  if (window.innerWidth > 640) return;
+
+  const dots = document.createElement('div');
+  dots.id = 'board-dots';
+  CATEGORIES.forEach((_, i) => {
+    const d = document.createElement('span');
+    d.className = 'board-dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => {
+      const col = boardEl.querySelector(`.category-col[data-ci="${i}"]`);
+      col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+    });
+    dots.appendChild(d);
+  });
+  boardEl.parentElement.insertBefore(dots, boardEl.nextSibling);
+
+  boardEl.addEventListener('scroll', () => {
+    const colWidth = boardEl.clientWidth;
+    const active   = Math.round(boardEl.scrollLeft / colWidth);
+    dots.querySelectorAll('.board-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === active)
+    );
+  }, { passive: true });
 }
 
 function fillColumn(ci, clues) {
