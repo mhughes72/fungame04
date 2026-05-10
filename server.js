@@ -44,7 +44,7 @@ app.get('/api/categories', async (req, res) => {
       ? `\nDo NOT reuse or closely overlap with these recent category themes: ${usedCategories.slice(-30).join(', ')}.`
       : '';
     const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       max_tokens: 300,
       temperature: 1.1,
       response_format: { type: 'json_object' },
@@ -126,7 +126,7 @@ app.post('/api/category', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Missing name' });
 
   const makeRequest = () => client.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-4o',
     max_tokens: 700,
     temperature: 1.1,
     response_format: { type: 'json_object' },
@@ -166,7 +166,7 @@ Return JSON only.`,
 
   const rewriteLeakingClue = async (clue) => {
     const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       max_tokens: 200,
       temperature: 0.9,
       response_format: { type: 'json_object' },
@@ -181,7 +181,7 @@ Return JSON only.`,
 
   const factCheckClue = async (clue) => {
     const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       max_tokens: 200,
       temperature: 0.2,
       response_format: { type: 'json_object' },
