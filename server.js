@@ -141,7 +141,7 @@ app.post('/api/category', async (req, res) => {
   BAD (leaks): Answer is "Spider-Man". Clue: "This Marvel superhero can shoot webs and climb walls like a spider." — "spider" is in the answer.
   GOOD rewrite: "This Marvel hero gained abilities from a radioactive arachnid bite, letting him scale buildings and shoot sticky threads."
 - Clues should be specific and avoid the most obvious facts
-- ACCURACY RULE: only state things you are confident are true. Do not invent specific statistics, obscure event outcomes, or niche historical details to make a clue sound interesting — if you are not certain a claim is accurate, describe the answer through its well-established characteristics instead. A clue that is factually safe is better than one that sounds impressive but may be wrong.
+- ACCURACY RULE: only state things you are confident would appear in a mainstream encyclopedia. Do not invent specific statistics, obscure event outcomes, niche historical details, or specialist classifications to make a clue sound interesting. Ask yourself: "would a Wikipedia article on this subject clearly state this claim?" If not, describe the answer through its well-established, widely-known characteristics instead. A clue that is factually safe is better than one that sounds impressive but may be wrong.
 Return JSON only.`,
       },
       {
@@ -186,7 +186,7 @@ Return JSON only.`,
       temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: 'You are a fact-checker for a single Jeopardy clue. Verify every factual claim: nationalities, dates, record counts, event descriptions, attributions. UNCERTAINTY RULE: if you are not fully confident a specific claim is accurate — even if it sounds plausible — rewrite the clue to describe the answer through safer, well-established facts instead. It is better to rewrite than to leave a dubious claim in. If the clue is clearly correct, return it unchanged. Return JSON only.' },
+        { role: 'system', content: 'You are a fact-checker for a single Jeopardy clue. Verify every factual claim: nationalities, dates, record counts, event descriptions, attributions, language families, scientific classifications. UNCERTAINTY RULE: if a claim would not clearly appear in a mainstream encyclopedia — even if it sounds plausible — rewrite the clue to use only well-established, widely-known facts about the answer instead. It is better to rewrite than to leave a dubious claim in. If every claim is clearly correct, return it unchanged. Return JSON only.' },
         { role: 'user',   content: `Clue: "${clue.clue}"\nAnswer: "${clue.answer}"\n\nReturn JSON: { "clue": "verified or corrected clue", "changed": true|false }` },
       ],
     });
