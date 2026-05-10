@@ -69,15 +69,18 @@ Each AI has a distinct personality defined in `public/players.json`:
 
 ### AI Player Parameters (`players.json`)
 
-| Field | Description |
-|---|---|
-| `strategy` | Tile selection: `highValue`, `sweepCategory`, or `random` |
-| `speed` | Buzz timing: `fast`, `medium`, or `slow` |
-| `accuracy` | Base probability of knowing the correct answer (0.0–1.0) |
-| `specialties` | Per-domain accuracy multipliers. Values above 1.0 boost accuracy, below 1.0 reduce it. Domains: `science`, `history`, `popculture`, `sports`, `arts`, `geography`, `food`, `general` |
-| `riskTolerance` | *(not yet active)* `aggressive`, `conservative`, or `calculated` — Daily Double wagering style |
-| `buzzAggressiveness` | *(not yet active)* 0.0–2.0 multiplier on per-question buzz probability |
-| `reactionVoice` | *(not yet active)* `clinical`, `snarky`, `warm`, or `dramatic` — tone of result message feedback |
+| Field | Type | Values | Description |
+|---|---|---|---|
+| `name` | string | any | Display name shown on the scoreboard |
+| `isHuman` | boolean | `true` / `false` | Marks the human player slot. Only one entry should have this set. |
+| `avatar` | string | any emoji | Shown next to the player's name |
+| `strategy` | string | `highValue` `sweepCategory` `random` | Tile selection behaviour. `highValue` prioritises $800–$1000 tiles; `sweepCategory` completes one category before moving on; `random` picks randomly. |
+| `speed` | string | `fast` `medium` `slow` | How quickly the AI buzzes in. `fast` ≈ 1–2s, `medium` ≈ 2–4s, `slow` ≈ 4–6s after the clue finishes. |
+| `accuracy` | number | 0.0–1.0 | Base probability of answering correctly on a neutral clue. Modified by `specialties` per domain. A value of `1.0` means the AI will answer correctly unless the clue is very hard. |
+| `specialties` | object | multipliers per domain | Per-domain accuracy multipliers applied on top of `accuracy`. `1.0` = no change; `>1.0` = boosted; `<1.0` = weakened. Available domains: `science`, `history`, `popculture`, `sports`, `arts`, `geography`, `food`, `general`. Example: `"science": 1.5` means the AI is 50% more likely to answer science questions correctly. |
+| `riskTolerance` | string | `aggressive` `conservative` `calculated` | *(not yet active)* Daily Double wagering style. `aggressive` = wager high; `conservative` = wager low; `calculated` = wager based on score position. |
+| `buzzAggressiveness` | number | 0.0–2.0 | *(not yet active)* Multiplier on per-question buzz probability. `1.0` = default; `2.0` = buzzes on nearly everything; `0.5` = much more selective. |
+| `reactionVoice` | string | `clinical` `snarky` `warm` `dramatic` | *(not yet active)* Tone of the AI's result message feedback shown after answers. |
 
 ## Post-Game Breakdown
 
