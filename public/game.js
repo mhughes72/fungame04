@@ -9,8 +9,12 @@ const TEST_CLUES = [
   { clue: 'This U.S. president, nicknamed "Old Hickory", is credited with founding the Democratic Party.', answer: 'Andrew Jackson'         },
 ];
 
-const R1_VALUES     = [200, 400, 600, 800, 1000];
-const R2_VALUES     = [400, 800, 1200, 1600, 2000];
+const R1_VALUES          = [200, 400, 600, 800, 1000];
+const R2_VALUES          = [400, 800, 1200, 1600, 2000];
+const MS_PER_CHAR        = 38;
+const BUZZ_DURATION_MS   = 8000;
+const FINAL_JEOPARDY_MS  = 30000;
+
 let   VALUES        = R1_VALUES;
 let   currentRound  = 1;
 const CIRCUMFERENCE = 2 * Math.PI * 44;
@@ -120,6 +124,102 @@ const betInput       = document.getElementById('bet-input');
 const betSubmitBtn   = document.getElementById('bet-submit-btn');
 const aiBetDisplay   = document.getElementById('ai-bet-display');
 
+// ── Shared API helper ──
+const api = {
+  post: (path, body) => fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(r => r.json()),
+  get: path => fetch(path).then(r => r.json()),
+};
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── Host Commentary ───────────────────────────────────────────────────────────
+const hostPanel    = document.getElementById('host-panel');
+const hostLineEl   = document.getElementById('host-line');
+let   hostTimer    = null;
+
+const HOST_LINES = {
+  game_start: [
+    "Welcome, welcome, WELCOME — let's play!",
+    "Good evening folks, and welcome to the show!",
+    "Alright everybody, it is time to play!",
+    "Ladies and gentlemen, start your engines — we are ON THE AIR!",
+  ],
+  buzz_open: [
+    "Fingers on the buzzers, folks!",
+    "Who's gonna take this one?",
+    "Here we go — who knows it?",
+    "Somebody out there knows this…",
+    "Clock is ticking!",
+    "Think fast!",
+  ],
+  correct: [
+    "That is correct!",
+    "The judges love it!",
+    "Right you are!",
+    "We'll take it!",
+    "That's the one!",
+    "Money in the bank!",
+    "The crowd goes wild — well, politely!",
+  ],
+  wrong: [
+    "Ohhh, so close!",
+    "The judges say no!",
+    "That's not it — sorry!",
+    "Nope! Anyone else want a crack at it?",
+    "Not quite!",
+    "Sorry, we cannot take that one!",
+    "Oh dear, oh dear.",
+  ],
+  no_buzz: [
+    "Nobody?! NOBODY?!",
+    "Going once… going twice…",
+    "Come on, someone out there knows this!",
+    "You're letting it get away!",
+    "This one slips by unclaimed, folks.",
+    "Tough room tonight!",
+  ],
+  daily_double: [
+    "A DAILY DOUBLE! Oh boy, oh boy!",
+    "DAILY DOUBLE! This is where fortunes are made, folks!",
+    "A DAILY DOUBLE — now don't blow it!",
+    "DAILY DOUBLE! The audience is on the edge of their seats!",
+  ],
+  double_jeopardy: [
+    "Hold on to your seats — it's DOUBLE JEOPARDY!",
+    "DOUBLE JEOPARDY! Values doubled, drama guaranteed!",
+    "The stakes just got a whole lot bigger, ladies and gentlemen!",
+  ],
+  final_jeopardy: [
+    "And now, the moment you've all been waiting for — FINAL JEOPARDY!",
+    "One clue. Everything on the line. This is FINAL JEOPARDY!",
+    "This is it, folks — FINAL JEOPARDY is upon us!",
+  ],
+};
+
+function showHostLine(line) {
+  clearTimeout(hostTimer);
+  hostLineEl.textContent = line;
+  hostPanel.classList.remove('hidden');
+  hostTimer = setTimeout(() => hostPanel.classList.add('hidden'), 5500);
+}
+
+function hostLookup(event, chance = 1.0) {
+  if (Math.random() > chance) return;
+  const lines = HOST_LINES[event];
+  if (!lines?.length) return;
+  showHostLine(lines[Math.floor(Math.random() * lines.length)]);
+}
+
+function hostGPT(event, context) {
+  api.post('/api/host-comment', { event, context })
+    .then(d => { if (d.line) showHostLine(d.line); })
+    .catch(() => {});
+}
+
 // ── Scoreboard ──
 const scoreEls = [];
 
@@ -178,7 +278,7 @@ function playerImgEl(player, className) {
 
 // ── Player selection modal ──
 async function showPlayerSelect() {
-  const allPlayers = await fetch('/api/players').then(r => r.json());
+  const allPlayers = await api.get('/api/players');
   const aiPlayers  = allPlayers.filter(p => !p.isHuman);
 
   const grid      = document.getElementById('player-select-grid');
@@ -229,25 +329,40 @@ async function showPlayerSelect() {
   });
 }
 
+// ── Categories helpers ──
+function parseCategoriesResponse(data) {
+  if (data.categories.length && typeof data.categories[0] === 'object') {
+    return {
+      categories: data.categories.map(c => c.name),
+      domains:    data.categories.map(c => c.domain || 'general'),
+    };
+  }
+  return {
+    categories: data.categories,
+    domains:    data.categories.map(() => 'general'),
+  };
+}
+
+function loadAllCategories(round = 1) {
+  CATEGORIES.forEach((name, ci) => {
+    api.post('/api/category', round === 2 ? { name, round } : { name })
+      .then(d => fillColumn(ci, d.clues))
+      .catch(() => setColumnError(ci));
+  });
+}
+
 // ── Init ──
 async function init() {
   try {
     PLAYERS = await showPlayerSelect();
 
-    const categoriesRes = await fetch('/api/categories');
-    const cats = await categoriesRes.json();
-    // Support both old string[] and new {name, domain}[] format
-    if (cats.categories.length && typeof cats.categories[0] === 'object') {
-      CATEGORIES      = cats.categories.map(c => c.name);
-      categoryDomains = cats.categories.map(c => c.domain || 'general');
-    } else {
-      CATEGORIES      = cats.categories;
-      categoryDomains = cats.categories.map(() => 'general');
-    }
+    const data = await api.get('/api/categories');
+    ({ categories: CATEGORIES, domains: categoryDomains } = parseCategoriesResponse(data));
 
     PLAYERS.forEach(() => scores.push(0));
     buildScoreboard();
     setController(0);
+    hostLookup('game_start');
     initStats();
 
     board = CATEGORIES.map(() =>
@@ -259,16 +374,7 @@ async function init() {
     loadingScreen.classList.add('fade-out');
     setTimeout(() => loadingScreen.remove(), 400);
 
-    CATEGORIES.forEach((name, ci) => {
-      fetch('/api/category', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      })
-        .then(r => r.json())
-        .then(d => fillColumn(ci, d.clues))
-        .catch(() => setColumnError(ci));
-    });
+    loadAllCategories(1);
   } catch (err) {
     document.querySelector('#loading-inner p').textContent = 'Failed to load. Check server.';
     console.error(err);
@@ -422,6 +528,7 @@ function activateBuzzing() {
   if (!attemptedPlayers.has(0)) buzzBtn.focus();
   startAITimers();
   startBuzzTimer();
+  hostLookup('buzz_open', 0.35);
 }
 
 function closeModal() {
@@ -445,8 +552,6 @@ function closeModal() {
 }
 
 // ── Clue reveal ──
-const MS_PER_CHAR = 38;
-
 function revealClue(text, onComplete) {
   clearInterval(revealInterval);
   clueText.textContent = text;
@@ -466,8 +571,6 @@ function revealClue(text, onComplete) {
 }
 
 // ── Buzz countdown ──
-const BUZZ_DURATION_MS = 8000;
-
 function startBuzzTimer() {
   clearBuzzTimer();
   const duration = attemptedPlayers.size > 0 ? 5000 : BUZZ_DURATION_MS;
@@ -504,6 +607,7 @@ function clueExpired() {
   continueBtn.classList.remove('hidden');
   showPhase(phaseResult);
   continueBtn.focus();
+  hostLookup('no_buzz', 0.65);
 }
 
 // ── AI timers ──
@@ -542,6 +646,7 @@ function openDailyDouble(ci, vi) {
   const maxBet      = Math.max(scores[selectorIdx], 1000);
 
   categoryLabel.textContent = `${CATEGORIES[ci]} — DAILY DOUBLE!`;
+  hostLookup('daily_double');
   showPhase(phaseBet);
 
   if (player.isHuman) {
@@ -599,157 +704,147 @@ function startDailyDoubleClue(ci, vi, playerIdx) {
   }
 }
 
+// ── Shared judge helper ──
+async function judgeAnswer(body) {
+  try {
+    return await api.post('/api/judge', body);
+  } catch {
+    return { correct: false, needsClarification: false, message: 'Judge unavailable.' };
+  }
+}
+
+// ── Shared AI display helper ──
+async function showAIAnswering(bannerText, fetchBody) {
+  showPhase(phaseAI);
+  aiBuzzName.textContent   = bannerText;
+  aiBuzzStatus.textContent = 'Thinking…';
+  aiAnswerReveal.classList.add('hidden');
+  aiAnswerReveal.textContent = '';
+
+  let answer = '';
+  try {
+    const data = await api.post('/api/ai-answer', fetchBody);
+    answer = data.answer || '';
+  } catch {}
+
+  aiBuzzStatus.textContent   = 'Answer:';
+  aiAnswerReveal.textContent = `"${answer}"`;
+  aiAnswerReveal.classList.remove('hidden');
+  await sleep(900);
+  showPhase(phaseJudging);
+  return answer;
+}
+
+// ── AI answer flows ──
 async function handleAIDailyDouble(playerIdx) {
   const { ci, vi } = activeCell;
   const entry  = board[ci][vi];
   const player = PLAYERS[playerIdx];
 
-  showPhase(phaseAI);
-  aiBuzzName.textContent   = `${player.name} — Daily Double!`;
-  aiBuzzStatus.textContent = 'Thinking…';
-  aiAnswerReveal.classList.add('hidden');
-  aiAnswerReveal.textContent = '';
+  const spokenAnswer = await showAIAnswering(`${player.name} — Daily Double!`, {
+    clue: entry.clue, category: CATEGORIES[ci], value: VALUES[vi],
+    accuracy: player.accuracy ?? 1.0, domain: categoryDomains[ci] ?? 'general',
+    specialties: player.specialties ?? {},
+  });
 
-  let spokenAnswer = '';
-  try {
-    const res  = await fetch('/api/ai-answer', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ clue: entry.clue, category: CATEGORIES[ci], value: VALUES[vi], accuracy: player.accuracy ?? 1.0, domain: categoryDomains[ci] ?? 'general', specialties: player.specialties ?? {} }),
-    });
-    const data = await res.json();
-    spokenAnswer = data.answer || '';
-  } catch { /* leave empty */ }
-
-  aiBuzzStatus.textContent   = 'Answer:';
-  aiAnswerReveal.textContent = `"${spokenAnswer}"`;
-  aiAnswerReveal.classList.remove('hidden');
-  await sleep(900);
-  showPhase(phaseJudging);
-
-  try {
-    const judgeRes  = await fetch('/api/judge', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenAnswer }),
-    });
-    const judgeData = await judgeRes.json();
-    if (judgeData.needsClarification) {
-      await handleAIClarification(playerIdx, entry, ci, vi, spokenAnswer);
-    } else {
-      showResult(playerIdx, judgeData.correct, judgeData.message, entry.answer, currentWager);
-    }
-  } catch {
-    showResult(playerIdx, false, 'Judge unavailable.', entry.answer, currentWager);
+  const judgeData = await judgeAnswer({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenAnswer });
+  if (judgeData.needsClarification) {
+    await handleAIClarification(playerIdx, entry, ci, vi, spokenAnswer);
+  } else {
+    showResult(playerIdx, judgeData.correct, judgeData.message, entry.answer, currentWager);
   }
 }
 
-// ── AI answer flow ──
 async function handleAIBuzz(playerIdx) {
   const { ci, vi } = activeCell;
   const entry  = board[ci][vi];
   const player = PLAYERS[playerIdx];
 
-  showPhase(phaseAI);
-  aiBuzzName.textContent = `${player.name} buzzed in!`;
-  aiBuzzStatus.textContent = 'Thinking…';
-  aiAnswerReveal.classList.add('hidden');
-  aiAnswerReveal.textContent = '';
+  const spokenAnswer = await showAIAnswering(`${player.name} buzzed in!`, {
+    clue: entry.clue, category: CATEGORIES[ci], value: VALUES[vi],
+    accuracy: player.accuracy ?? 1.0, domain: categoryDomains[ci] ?? 'general',
+    specialties: player.specialties ?? {}, wrongAnswers,
+  });
 
-  let spokenAnswer = '';
-  try {
-    const res = await fetch('/api/ai-answer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clue:        entry.clue,
-        category:    CATEGORIES[ci],
-        value:       VALUES[vi],
-        accuracy:    player.accuracy ?? 1.0,
-        domain:      categoryDomains[ci] ?? 'general',
-        specialties: player.specialties ?? {},
-        wrongAnswers,
-      }),
-    });
-    const data = await res.json();
-    spokenAnswer = data.answer || '';
-  } catch { /* leave empty */ }
-
-  aiBuzzStatus.textContent = 'Answer:';
-  aiAnswerReveal.textContent = `"${spokenAnswer}"`;
-  aiAnswerReveal.classList.remove('hidden');
-
-  await sleep(900);
-  showPhase(phaseJudging);
-
-  try {
-    const judgeRes  = await fetch('/api/judge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenAnswer }),
-    });
-    const judgeData = await judgeRes.json();
-
-    if (judgeData.needsClarification) {
-      await handleAIClarification(playerIdx, entry, ci, vi, spokenAnswer);
-    } else {
-      if (!judgeData.correct) wrongAnswers.push(spokenAnswer);
-      showResult(playerIdx, judgeData.correct, judgeData.message, entry.answer, VALUES[vi]);
-    }
-  } catch {
-    showResult(playerIdx, false, 'Judge unavailable.', entry.answer, VALUES[vi]);
+  const judgeData = await judgeAnswer({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenAnswer });
+  if (judgeData.needsClarification) {
+    await handleAIClarification(playerIdx, entry, ci, vi, spokenAnswer);
+  } else {
+    if (!judgeData.correct) wrongAnswers.push(spokenAnswer);
+    showResult(playerIdx, judgeData.correct, judgeData.message, entry.answer, VALUES[vi]);
   }
 }
 
 async function handleAIClarification(playerIdx, entry, ci, vi, previousAnswer) {
   const player = PLAYERS[playerIdx];
 
-  // Show "be more specific" in the AI phase
-  showPhase(phaseAI);
-  aiBuzzName.textContent   = `${player.name} — be more specific!`;
-  aiBuzzStatus.textContent = 'Thinking…';
-  aiAnswerReveal.classList.add('hidden');
+  const clarifiedAnswer = await showAIAnswering(`${player.name} — be more specific!`, {
+    clue: entry.clue, category: CATEGORIES[ci], value: VALUES[vi],
+    accuracy: player.accuracy ?? 1.0, clarification: true, previousAnswer,
+  });
 
-  // Get a more specific answer
-  let clarifiedAnswer = '';
-  try {
-    const res  = await fetch('/api/ai-answer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clue:           entry.clue,
-        category:       CATEGORIES[ci],
-        value:          VALUES[vi],
-        accuracy:       player.accuracy ?? 1.0,
-        clarification:  true,
-        previousAnswer,
-      }),
-    });
-    const data = await res.json();
-    clarifiedAnswer = data.answer || '';
-  } catch { /* leave empty */ }
-
-  aiBuzzStatus.textContent = 'Answer:';
-  aiAnswerReveal.textContent = `"${clarifiedAnswer}"`;
-  aiAnswerReveal.classList.remove('hidden');
-
-  await sleep(900);
-  showPhase(phaseJudging);
-
-  try {
-    const res  = await fetch('/api/judge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: clarifiedAnswer, clarification: true }),
-    });
-    const data = await res.json();
-    showResult(playerIdx, !!data.correct, data.message, entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
-  } catch {
-    showResult(playerIdx, false, 'Judge unavailable.', entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
-  }
+  const judgeData = await judgeAnswer({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: clarifiedAnswer, clarification: true });
+  showResult(playerIdx, !!judgeData.correct, judgeData.message, entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// ── Speech recognition factory ──
+function startSpeechRecognition({ seconds, ringEl, countdownEl, transcriptEl, onSubmit }) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('Web Speech API is not supported in this browser. Please use Chrome.');
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.continuous     = true;
+  recognition.interimResults = true;
+  recognition.lang           = 'en-US';
+
+  let finalTranscript = '';
+  let submitted       = false;
+  let secondsLeft     = seconds;
+
+  ringEl.style.strokeDasharray  = CIRCUMFERENCE;
+  ringEl.style.strokeDashoffset = 0;
+  ringEl.classList.remove('urgent');
+  countdownEl.textContent = secondsLeft;
+
+  recognition.onresult = e => {
+    let interim = '';
+    finalTranscript = '';
+    for (let i = 0; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    transcriptEl.textContent = finalTranscript || interim;
+  };
+
+  recognition.onerror = e => {
+    if (e.error !== 'no-speech') console.warn('Speech error:', e.error);
+  };
+
+  recognition.start();
+
+  const interval = setInterval(() => {
+    secondsLeft--;
+    countdownEl.textContent = secondsLeft;
+    ringEl.style.strokeDashoffset = CIRCUMFERENCE * (1 - secondsLeft / seconds);
+    if (secondsLeft <= 2) ringEl.classList.add('urgent');
+    if (secondsLeft <= 0) {
+      clearInterval(interval);
+      recognition.stop();
+      if (!submitted) { submitted = true; onSubmit(finalTranscript || transcriptEl.textContent); }
+    }
+  }, 1000);
+
+  recognition.onend = () => {
+    if (!submitted && secondsLeft > 0) {
+      submitted = true;
+      clearInterval(interval);
+      onSubmit(finalTranscript || transcriptEl.textContent);
+    }
+  };
+}
 
 // ── Human buzz ──
 buzzBtn.addEventListener('click', () => {
@@ -761,85 +856,26 @@ buzzBtn.addEventListener('click', () => {
 });
 
 function startListening() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert('Web Speech API is not supported in this browser. Please use Chrome.');
-    return;
-  }
-
   showPhase(phaseListen);
-
-  const recognition = new SpeechRecognition();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-
-  let finalTranscript = '';
-  let submitted = false;
-  let secondsLeft = 5;
-
-  ringProgress.style.strokeDasharray = CIRCUMFERENCE;
-  ringProgress.style.strokeDashoffset = 0;
-  ringProgress.classList.remove('urgent');
-  countdownNum.textContent = secondsLeft;
-
-  recognition.onresult = e => {
-    let interim = '';
-    finalTranscript = '';
-    for (let i = 0; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-    transcriptDisp.textContent = finalTranscript || interim;
-  };
-
-  recognition.onerror = e => {
-    if (e.error !== 'no-speech') console.warn('Speech error:', e.error);
-  };
-
-  recognition.start();
-
-  const interval = setInterval(() => {
-    secondsLeft--;
-    countdownNum.textContent = secondsLeft;
-    ringProgress.style.strokeDashoffset = CIRCUMFERENCE * (1 - secondsLeft / 5);
-    if (secondsLeft <= 2) ringProgress.classList.add('urgent');
-    if (secondsLeft <= 0) {
-      clearInterval(interval);
-      recognition.stop();
-      if (!submitted) { submitted = true; submitHumanAnswer(finalTranscript || transcriptDisp.textContent); }
-    }
-  }, 1000);
-
-  recognition.onend = () => {
-    if (!submitted && secondsLeft > 0) {
-      submitted = true;
-      clearInterval(interval);
-      submitHumanAnswer(finalTranscript || transcriptDisp.textContent);
-    }
-  };
+  startSpeechRecognition({
+    seconds:     5,
+    ringEl:      ringProgress,
+    countdownEl: countdownNum,
+    transcriptEl: transcriptDisp,
+    onSubmit:    text => submitHumanAnswer(text),
+  });
 }
 
 async function submitHumanAnswer(spokenText) {
   const { ci, vi } = activeCell;
   const entry = board[ci][vi];
   showPhase(phaseJudging);
-
-  try {
-    const res = await fetch('/api/judge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenText }),
-    });
-    const data = await res.json();
-    const val = isDailyDouble ? currentWager : VALUES[vi];
-    if (data.needsClarification) {
-      showClarification(spokenText, val);
-    } else {
-      showResult(0, data.correct, data.message, entry.answer, val);
-    }
-  } catch {
-    showResult(0, false, 'Could not reach the judge.', entry.answer, isDailyDouble ? currentWager : VALUES[vi]);
+  const val  = isDailyDouble ? currentWager : VALUES[vi];
+  const data = await judgeAnswer({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenText });
+  if (data.needsClarification) {
+    showClarification(spokenText, val);
+  } else {
+    showResult(0, data.correct, data.message, entry.answer, val);
   }
 }
 
@@ -852,77 +888,21 @@ function showClarification(originalAnswer, value) {
 }
 
 function startClarifyListening(value) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) return;
-
-  const recognition = new SpeechRecognition();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-
-  const CLARIFY_SECS = 4;
-  let finalTranscript = '';
-  let submitted = false;
-  let secondsLeft = CLARIFY_SECS;
-
-  clarifyRingProgress.style.strokeDasharray = CIRCUMFERENCE;
-  clarifyRingProgress.style.strokeDashoffset = 0;
-  clarifyRingProgress.classList.remove('urgent');
-  clarifyCountdownNum.textContent = secondsLeft;
-
-  recognition.onresult = e => {
-    let interim = '';
-    finalTranscript = '';
-    for (let i = 0; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-    clarifyTranscript.textContent = finalTranscript || interim;
-  };
-
-  recognition.onerror = e => {
-    if (e.error !== 'no-speech') console.warn('Speech error:', e.error);
-  };
-
-  recognition.start();
-
-  const interval = setInterval(() => {
-    secondsLeft--;
-    clarifyCountdownNum.textContent = secondsLeft;
-    clarifyRingProgress.style.strokeDashoffset = CIRCUMFERENCE * (1 - secondsLeft / CLARIFY_SECS);
-    if (secondsLeft <= 2) clarifyRingProgress.classList.add('urgent');
-    if (secondsLeft <= 0) {
-      clearInterval(interval);
-      recognition.stop();
-      if (!submitted) { submitted = true; submitClarifiedAnswer(finalTranscript || clarifyTranscript.textContent, value); }
-    }
-  }, 1000);
-
-  recognition.onend = () => {
-    if (!submitted && secondsLeft > 0) {
-      submitted = true;
-      clearInterval(interval);
-      submitClarifiedAnswer(finalTranscript || clarifyTranscript.textContent, value);
-    }
-  };
+  startSpeechRecognition({
+    seconds:     4,
+    ringEl:      clarifyRingProgress,
+    countdownEl: clarifyCountdownNum,
+    transcriptEl: clarifyTranscript,
+    onSubmit:    text => submitClarifiedAnswer(text, value),
+  });
 }
 
 async function submitClarifiedAnswer(spokenText, value) {
   const { ci, vi } = activeCell;
   const entry = board[ci][vi];
   showPhase(phaseJudging);
-
-  try {
-    const res = await fetch('/api/judge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenText, clarification: true }),
-    });
-    const data = await res.json();
-    showResult(0, !!data.correct, data.message, entry.answer, value);
-  } catch {
-    showResult(0, false, 'Could not reach the judge.', entry.answer, value);
-  }
+  const data = await judgeAnswer({ clue: entry.clue, correctAnswer: entry.answer, playerAnswer: spokenText, clarification: true });
+  showResult(0, !!data.correct, data.message, entry.answer, value);
 }
 
 // ── Result ──
@@ -957,6 +937,16 @@ function showResult(playerIdx, correct, message, correctAnswer, value) {
     board[ci][vi].state = 'done';
     getCell(ci, vi).classList.add('answered');
     getCell(ci, vi).textContent = '';
+  }
+
+  // Host commentary — GPT for notable moments, lookup for routine ones
+  const { ci: rci, vi: rvi } = activeCell;
+  if (correct) {
+    if (value >= 600) hostGPT('correct_notable', { player: PLAYERS[playerIdx].name, category: CATEGORIES[rci], value });
+    else hostLookup('correct');
+  } else {
+    if (value <= 400) hostGPT('wrong_easy', { player: PLAYERS[playerIdx].name, category: CATEGORIES[rci], value });
+    else hostLookup('wrong');
   }
 
   const prefix = PLAYERS[playerIdx].isHuman ? '' : `<strong>${PLAYERS[playerIdx].name}</strong>: `;
@@ -1030,14 +1020,10 @@ function pickTile(strategy) {
 }
 
 // ── Double Jeopardy transition ──
-
 async function startDoubleJeopardy() {
   // Record round 1 answers before the board is replaced
   const r1Answers = board.flatMap(col => col.map(c => c.answer)).filter(Boolean);
-  if (r1Answers.length) fetch('/api/record-answers', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ answers: r1Answers }),
-  });
+  if (r1Answers.length) api.post('/api/record-answers', { answers: r1Answers });
 
   // Show transition screen with current standings
   const djScoresEl = document.getElementById('dj-scores');
@@ -1050,6 +1036,7 @@ async function startDoubleJeopardy() {
       <span class="dj-sr-score">$${s.toLocaleString()}</span>
     </div>`).join('');
 
+  hostLookup('double_jeopardy');
   document.getElementById('dj-transition').classList.remove('hidden');
   await sleep(3800);
   document.getElementById('dj-transition').classList.add('hidden');
@@ -1064,24 +1051,13 @@ async function startDoubleJeopardy() {
   setController(lastPlaces[Math.floor(Math.random() * lastPlaces.length)]);
 
   // Fetch new categories
-  let newCats = [], newDomains = [];
   try {
-    const res  = await fetch('/api/categories');
-    const data = await res.json();
-    if (data.categories.length && typeof data.categories[0] === 'object') {
-      newCats    = data.categories.map(c => c.name);
-      newDomains = data.categories.map(c => c.domain || 'general');
-    } else {
-      newCats    = data.categories;
-      newDomains = data.categories.map(() => 'general');
-    }
+    const data = await api.get('/api/categories');
+    ({ categories: CATEGORIES, domains: categoryDomains } = parseCategoriesResponse(data));
   } catch {
     document.querySelector('#loading-inner p').textContent = 'Failed to load Round 2. Check server.';
     return;
   }
-
-  CATEGORIES      = newCats;
-  categoryDomains = newDomains;
 
   board = CATEGORIES.map(() =>
     VALUES.map(() => ({ clue: null, answer: null, state: 'loading' }))
@@ -1091,22 +1067,12 @@ async function startDoubleJeopardy() {
   assignDailyDoubles();
   stumpedCount = 0;
 
-  CATEGORIES.forEach((name, ci) => {
-    fetch('/api/category', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, round: 2 }),
-    })
-      .then(r => r.json())
-      .then(d => fillColumn(ci, d.clues))
-      .catch(() => setColumnError(ci));
-  });
+  loadAllCategories(2);
 
   if (!PLAYERS[boardController].isHuman) aiSelectTile(boardController);
 }
 
 // ── Final Jeopardy ──
-
 function showFJPhase(name) {
   ['reveal', 'wager', 'clue', 'answers'].forEach(p =>
     document.getElementById(`fj-phase-${p}`).classList.add('hidden')
@@ -1143,14 +1109,14 @@ async function startFinalJeopardy() {
   fjWagers  = new Array(PLAYERS.length).fill(0);
   fjAnswers = new Array(PLAYERS.length).fill('');
 
+  hostLookup('final_jeopardy');
   document.getElementById('fj-screen').classList.remove('hidden');
   showFJPhase('reveal');
   document.getElementById('fj-reveal-cat').textContent = '';
   document.getElementById('fj-reveal-sub').textContent = 'Generating Final Jeopardy…';
 
   try {
-    const res  = await fetch('/api/final-jeopardy');
-    const data = await res.json();
+    const data = await api.get('/api/final-jeopardy');
     fjCategory = data.category || 'General Knowledge';
     fjClue     = data.clue     || 'This question could not be loaded.';
     fjAnswer   = data.answer   || '???';
@@ -1240,34 +1206,9 @@ async function revealAIWagers() {
   }
 }
 
-async function showFJClue() {
-  showFJPhase('clue');
-  document.getElementById('fj-clue-cat').textContent      = fjCategory.toUpperCase();
-  document.getElementById('fj-clue-text').textContent     = '';
-  document.getElementById('fj-clue-status').textContent   = '';
-  document.getElementById('fj-clue-transcript').textContent = '';
-
-  // Fire off all AI answer requests in parallel now — they'll be ready before the 30s is up
-  const aiAnswerPromises = PLAYERS.map((p, i) => {
-    if (p.isHuman) return Promise.resolve('');
-    return fetch('/api/ai-answer', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        clue:        fjClue,
-        category:    fjCategory,
-        value:       1000,
-        accuracy:    p.accuracy    ?? 1.0,
-        domain:      'general',
-        specialties: p.specialties ?? {},
-      }),
-    }).then(r => r.json()).then(d => d.answer || '').catch(() => '');
-  });
-
-  // Reveal clue text with typing animation
-  await new Promise(resolve => {
-    const text  = fjClue;
-    const el    = document.getElementById('fj-clue-text');
+// ── FJ clue helpers ──
+function animateFJText(text, el) {
+  return new Promise(resolve => {
     el.textContent = text;
     el.style.minHeight = el.offsetHeight + 'px';
     el.textContent = '';
@@ -1277,26 +1218,29 @@ async function showFJClue() {
       if (i >= text.length) { clearInterval(iv); resolve(); }
     }, MS_PER_CHAR);
   });
+}
 
-  // Start 30-second countdown
-  const FINAL_MS    = 30000;
-  const timerBar    = document.getElementById('fj-timer-bar');
-  const timerNum    = document.getElementById('fj-timer-num');
-  const statusEl    = document.getElementById('fj-clue-status');
-  const transcriptEl = document.getElementById('fj-clue-transcript');
+function startFJTimer(ms, barEl, numEl) {
+  barEl.style.transition = 'none';
+  barEl.style.transform  = 'scaleX(1)';
+  barEl.offsetHeight;
+  barEl.style.transition = `transform ${ms}ms linear`;
+  barEl.style.transform  = 'scaleX(0)';
 
-  timerBar.style.transition = 'none';
-  timerBar.style.transform  = 'scaleX(1)';
-  timerBar.offsetHeight;
-  timerBar.style.transition = `transform ${FINAL_MS}ms linear`;
-  timerBar.style.transform  = 'scaleX(0)';
+  let secondsLeft = Math.round(ms / 1000);
+  numEl.textContent = secondsLeft;
+  const iv = setInterval(() => {
+    secondsLeft--;
+    numEl.textContent = Math.max(0, secondsLeft);
+    if (secondsLeft <= 0) clearInterval(iv);
+  }, 1000);
+}
 
-  let humanAnswer = '';
-  const humanIdx  = PLAYERS.findIndex(p => p.isHuman);
-
-  // Start speech recognition for human
+function startFJRecognition(statusEl, transcriptEl) {
+  let currentAnswer = '';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
+
   if (SpeechRecognition) {
     statusEl.textContent = '🎤 Listening for your answer…';
     recognition = new SpeechRecognition();
@@ -1309,8 +1253,8 @@ async function showFJClue() {
         if (e.results[j].isFinal) final  += e.results[j][0].transcript;
         else                       interim += e.results[j][0].transcript;
       }
-      humanAnswer = final || interim;
-      transcriptEl.textContent = humanAnswer;
+      currentAnswer = final || interim;
+      transcriptEl.textContent = currentAnswer;
     };
     recognition.onerror = e => { if (e.error !== 'no-speech') console.warn('FJ speech:', e.error); };
     recognition.start();
@@ -1318,23 +1262,43 @@ async function showFJClue() {
     statusEl.textContent = 'Speech unavailable — answer will be blank.';
   }
 
-  // Countdown ticker
-  let secondsLeft = 30;
-  timerNum.textContent = secondsLeft;
-  const countdownIv = setInterval(() => {
-    secondsLeft--;
-    timerNum.textContent = Math.max(0, secondsLeft);
-    if (secondsLeft <= 0) clearInterval(countdownIv);
-  }, 1000);
+  return {
+    stop:      () => { if (recognition) try { recognition.stop(); } catch {} },
+    getAnswer: () => currentAnswer,
+  };
+}
 
-  await sleep(FINAL_MS);
+async function showFJClue() {
+  showFJPhase('clue');
+  document.getElementById('fj-clue-cat').textContent      = fjCategory.toUpperCase();
+  document.getElementById('fj-clue-text').textContent     = '';
+  document.getElementById('fj-clue-status').textContent   = '';
+  document.getElementById('fj-clue-transcript').textContent = '';
 
-  clearInterval(countdownIv);
-  if (recognition) { try { recognition.stop(); } catch {} }
+  // Fire off all AI answer requests in parallel — they'll be ready before the 30s is up
+  const aiAnswerPromises = PLAYERS.map((p, i) => {
+    if (p.isHuman) return Promise.resolve('');
+    return api.post('/api/ai-answer', {
+      clue: fjClue, category: fjCategory, value: 1000,
+      accuracy: p.accuracy ?? 1.0, domain: 'general', specialties: p.specialties ?? {},
+    }).then(d => d.answer || '').catch(() => '');
+  });
 
-  fjAnswers[humanIdx] = humanAnswer;
-  statusEl.textContent = humanAnswer
-    ? `Answer locked in: "${humanAnswer}"`
+  await animateFJText(fjClue, document.getElementById('fj-clue-text'));
+
+  const statusEl     = document.getElementById('fj-clue-status');
+  const transcriptEl = document.getElementById('fj-clue-transcript');
+  const humanIdx     = PLAYERS.findIndex(p => p.isHuman);
+  const recognition  = startFJRecognition(statusEl, transcriptEl);
+
+  startFJTimer(FINAL_JEOPARDY_MS, document.getElementById('fj-timer-bar'), document.getElementById('fj-timer-num'));
+
+  await sleep(FINAL_JEOPARDY_MS);
+
+  recognition.stop();
+  fjAnswers[humanIdx] = recognition.getAnswer();
+  statusEl.textContent = fjAnswers[humanIdx]
+    ? `Answer locked in: "${fjAnswers[humanIdx]}"`
     : 'No answer recorded.';
 
   // Collect all AI answers (should already be resolved)
@@ -1343,6 +1307,57 @@ async function showFJClue() {
 
   await sleep(1200);
   showFJReveal();
+}
+
+// ── FJ reveal helper ──
+async function revealFJPlayer(pi) {
+  const card     = document.getElementById(`fj-ans-${pi}`);
+  const answerEl = document.getElementById(`fj-ans-text-${pi}`);
+  const resultEl = document.getElementById(`fj-ans-result-${pi}`);
+  const scoreEl  = document.getElementById(`fj-score-${pi}`);
+
+  card.classList.add('active');
+  await sleep(500);
+
+  const spoken = fjAnswers[pi] || '';
+  answerEl.textContent = spoken ? `"${spoken}"` : '(no answer)';
+  await sleep(1500);
+
+  let correct = false;
+  if (spoken) {
+    const data = await judgeAnswer({ clue: fjClue, correctAnswer: fjAnswer, playerAnswer: spoken });
+    correct = !!data.correct;
+  }
+
+  const wager = fjWagers[pi];
+  const delta = correct ? wager : -wager;
+
+  resultEl.textContent = correct
+    ? `✅ +$${wager.toLocaleString()}`
+    : wager > 0 ? `❌ -$${wager.toLocaleString()}` : `❌`;
+
+  card.classList.remove('active');
+  card.classList.add(correct ? 'fj-correct' : 'fj-wrong');
+
+  if (wager > 0) {
+    updateScore(pi, delta);
+    scoreEl.textContent = `$${scores[pi].toLocaleString()}`;
+    scoreEl.style.color = scores[pi] < 0 ? '#ff6666' : '';
+  }
+
+  const s = playerStats[pi];
+  s.attempts++;
+  if (correct) {
+    s.correct++;
+    s.currentStreak++;
+    s.longestStreak = Math.max(s.longestStreak, s.currentStreak);
+    s.biggestWin    = Math.max(s.biggestWin, wager);
+  } else {
+    s.currentStreak = 0;
+    s.biggestLoss   = Math.max(s.biggestLoss, wager);
+  }
+
+  await sleep(1000);
 }
 
 async function showFJReveal() {
@@ -1356,7 +1371,6 @@ async function showFJReveal() {
   // Lowest score first for maximum drama
   const order = PLAYERS.map((_, i) => i).sort((a, b) => scores[a] - scores[b]);
 
-  // Create all cards up front
   order.forEach(pi => {
     const p    = PLAYERS[pi];
     const card = document.createElement('div');
@@ -1374,73 +1388,10 @@ async function showFJReveal() {
   });
 
   await sleep(600);
-
-  for (const pi of order) {
-    const card     = document.getElementById(`fj-ans-${pi}`);
-    const answerEl = document.getElementById(`fj-ans-text-${pi}`);
-    const resultEl = document.getElementById(`fj-ans-result-${pi}`);
-    const scoreEl  = document.getElementById(`fj-score-${pi}`);
-
-    card.classList.add('active');
-    await sleep(500);
-
-    // Reveal answer
-    const spoken = fjAnswers[pi] || '';
-    answerEl.textContent = spoken ? `"${spoken}"` : '(no answer)';
-    await sleep(1500);
-
-    // Judge the answer
-    let correct = false;
-    if (spoken) {
-      try {
-        const res  = await fetch('/api/judge', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ clue: fjClue, correctAnswer: fjAnswer, playerAnswer: spoken }),
-        });
-        const data = await res.json();
-        correct = !!data.correct;
-      } catch { correct = false; }
-    }
-
-    const wager = fjWagers[pi];
-    const delta = correct ? wager : -wager;
-
-    resultEl.textContent = correct
-      ? `✅ +$${wager.toLocaleString()}`
-      : wager > 0 ? `❌ -$${wager.toLocaleString()}` : `❌`;
-
-    card.classList.remove('active');
-    card.classList.add(correct ? 'fj-correct' : 'fj-wrong');
-
-    if (wager > 0) {
-      updateScore(pi, delta);
-      scoreEl.textContent = `$${scores[pi].toLocaleString()}`;
-      scoreEl.style.color = scores[pi] < 0 ? '#ff6666' : '';
-    }
-
-    // Update stats
-    const s = playerStats[pi];
-    s.attempts++;
-    if (correct) {
-      s.correct++;
-      s.currentStreak++;
-      s.longestStreak = Math.max(s.longestStreak, s.currentStreak);
-      s.biggestWin    = Math.max(s.biggestWin, wager);
-    } else {
-      s.currentStreak = 0;
-      s.biggestLoss   = Math.max(s.biggestLoss, wager);
-    }
-
-    await sleep(1000);
-  }
+  for (const pi of order) await revealFJPlayer(pi);
 
   // Record FJ answer to avoid repeating it
-  fetch('/api/record-answers', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ answers: [fjAnswer] }),
-  });
+  api.post('/api/record-answers', { answers: [fjAnswer] });
 
   document.getElementById('fj-answer-correct').textContent = `Correct answer: ${fjAnswer}`;
   await sleep(600);
@@ -1454,6 +1405,7 @@ document.getElementById('fj-wager-btn').addEventListener('click', () => {
   if (isNaN(wager) || wager < 0) wager = 0;
   if (wager > maxWager) wager = maxWager;
   fjWagers[humanIdx] = wager;
+  hostGPT('fj_wager', { player: PLAYERS[humanIdx].name, wager, score: scores[humanIdx] });
 
   const wagerEl = document.getElementById(`fj-wc-${humanIdx}`);
   if (wagerEl) { wagerEl.textContent = `$${wager.toLocaleString()} ✓`; wagerEl.classList.add('locked'); }
@@ -1485,9 +1437,10 @@ function showBreakdown() {
 
   // Record all answers from this game to avoid repetition in future games
   const answers = board.flatMap(col => col.map(cell => cell.answer)).filter(Boolean);
-  if (answers.length) fetch('/api/record-answers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers }) });
+  if (answers.length) api.post('/api/record-answers', { answers });
 
-  const winner     = scores.indexOf(Math.max(...scores));
+  const winner = scores.indexOf(Math.max(...scores));
+  hostGPT('game_over', { winner: PLAYERS[winner].name, score: scores[winner] });
   const totalClues = CATEGORIES.length * VALUES.length;
 
   // Category each player dominated

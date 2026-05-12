@@ -1,11 +1,12 @@
 /**
- * Generate cartoony portrait images for AI players using DALL-E 3.
+ * Generate and manage player portrait images using DALL-E 3.
  *
  * Usage:
- *   node generate-player-images.js                  # all AI players, skip existing
- *   node generate-player-images.js --name "Roxie"   # one player only
- *   node generate-player-images.js --replace        # overwrite existing images
- *   node generate-player-images.js --name "Roxie" --replace
+ *   node generate-player-images.js                          # all AI players, skip existing
+ *   node generate-player-images.js --name "Debbie Fontaine" # one player only
+ *   node generate-player-images.js --replace                # overwrite existing images
+ *   node generate-player-images.js --host                   # generate host portrait (public/images/host.png)
+ *   node generate-player-images.js --create "a nervous librarian from Ohio who knows everything about classic literature"
  */
 
 require('dotenv').config();
@@ -14,14 +15,24 @@ const fs     = require('fs');
 const path   = require('path');
 const https  = require('https');
 
-const client     = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const OUTPUT_DIR = path.join(__dirname, 'public', 'images', 'players');
+const client      = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const OUTPUT_DIR  = path.join(__dirname, 'public', 'images', 'players');
+const PLAYERS_FILE = path.join(__dirname, 'public', 'players.json');
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
-const args       = process.argv.slice(2);
-const nameIdx    = args.indexOf('--name');
-const targetName = nameIdx !== -1 ? args[nameIdx + 1] : null;
-const replace    = args.includes('--replace');
+const args        = process.argv.slice(2);
+const nameIdx     = args.indexOf('--name');
+const targetName  = nameIdx !== -1 ? args[nameIdx + 1] : null;
+const replace     = args.includes('--replace');
+const genHost     = args.includes('--host');
+const createIdx   = args.indexOf('--create');
+const createBrief = createIdx !== -1 ? args[createIdx + 1] : null;
+
+const HOST = {
+  name:        'Chuck Pendleton',
+  personality: 'Warm, slightly corny, endlessly enthusiastic game show host who has been doing this since 1972 and loves every second of it. Wears his confidence like a blazer.',
+  appearance:  'A handsome man in his mid-40s with a broad smile, a full head of perfectly styled dark hair going silver at the temples, and a wide-lapel polyester suit in a warm caramel brown. Large tinted glasses. The kind of man who shakes your hand and makes you feel like you just won something.',
+};
 
 function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -31,10 +42,7 @@ function downloadImage(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     https.get(url, res => {
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode} downloading image`));
-        return;
-      }
+      if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
       res.pipe(file);
       file.on('finish', () => { file.close(); resolve(); });
       file.on('error', reject);
@@ -42,47 +50,155 @@ function downloadImage(url, dest) {
   });
 }
 
-async function generateForPlayer(player) {
+// ── Portrait prompt ───────────────────────────────────────────────────────────
+function buildPortraitPrompt(player) {
+  return [
+    `Portrait photograph of a Jeopardy! game show contestant named "${player.name}".`,
+    ``,
+    `Style: authentic 1970s–1980s network television. Warm Kodachrome colour film, slightly faded and saturated.`,
+    `Soft studio lighting with a subtle warm key light. Shallow depth of field. Grain consistent with 35mm film.`,
+    `The exact look of a CBS or NBC promotional headshot from 1979 — real, slightly imperfect, unmistakably of that era.`,
+    `Head-and-shoulders framing. Plain neutral studio backdrop, slightly out of focus.`,
+    `No text, no labels, no watermarks, no graphics in the image.`,
+    ``,
+    `Subject: ${player.appearance}`,
+    ``,
+    `Mood/expression (use as guidance only): ${player.personality}`,
+  ].join('\n');
+}
+
+async function generatePortrait(player) {
   const slug    = slugify(player.name);
   const outPath = path.join(OUTPUT_DIR, `${slug}.png`);
 
-  if (!replace && fs.existsSync(outPath)) {
-    console.log(`  [skip] ${player.name} — already exists (--replace to overwrite)`);
-    return;
-  }
-
   console.log(`  [gen]  ${player.name}…`);
-
-  const prompt = [
-    `Cartoon character portrait for a Jeopardy game show contestant named "${player.name}".`,
-    `Style: vibrant, fun, slightly exaggerated cartoon illustration — think Pixar or a high-quality animated series.`,
-    `Bust/portrait framing against a simple solid-colour background. No text or labels in the image.`,
-    ``,
-    `Appearance: ${player.appearance}`,
-    ``,
-    `Personality (use as mood/expression guidance only): ${player.personality}`,
-  ].join('\n');
-
   const response = await client.images.generate({
     model:   'dall-e-3',
-    prompt,
+    prompt:  buildPortraitPrompt(player),
     n:       1,
     size:    '1024x1024',
     quality: 'standard',
   });
 
-  const url = response.data[0].url;
-  await downloadImage(url, outPath);
+  await downloadImage(response.data[0].url, outPath);
   console.log(`  [ok]   saved → ${path.relative(__dirname, outPath)}`);
 }
 
+// ── --create: generate a new player from a plain-English brief ────────────────
+async function createPlayer(brief) {
+  console.log(`\nGenerating character from brief: "${brief}"\n`);
+
+  const systemPrompt = `You design eccentric human contestants for a Jeopardy!-style TV game show set in the late 1970s/early 1980s.
+Given a brief description, return a single JSON object with exactly these fields — nothing else, no markdown fences:
+
+{
+  "name":             string  (plausible full name matching the character),
+  "isHuman":          false,
+  "avatar":           string  (a single emoji that suits them),
+  "strategy":         string  ("highValue" | "sweepCategory" | "random"),
+  "speed":            string  ("slow" | "medium" | "fast"),
+  "accuracy":         number  (0.50–0.95 — how often correct when they buzz in),
+  "specialties": {
+    "science":        number,
+    "history":        number,
+    "popculture":     number,
+    "sports":         number,
+    "arts":           number,
+    "geography":      number,
+    "food":           number,
+    "general":        number
+  },
+  "riskTolerance":      string ("aggressive" | "calculated" | "conservative"),
+  "buzzAggressiveness": number (0.30–2.00 — how eagerly they buzz in),
+  "reactionVoice":      string ("clinical" | "snarky" | "warm" | "dramatic"),
+  "personality":        string (2–3 vivid sentences about their game-show personality and quirks),
+  "appearance":         string (2–3 sentences of specific physical description suitable for a photorealistic portrait)
+}
+
+Specialty values: 1.0 = average, below 1.0 = weak, above 1.0 = strong. Make the spread reflect the character's background.
+Keep appearance grounded and era-appropriate (1970s–1980s clothing, hair, etc).`;
+
+  const completion = await client.chat.completions.create({
+    model:    'gpt-4o',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user',   content: brief },
+    ],
+    temperature:  0.9,
+    max_tokens:   700,
+    response_format: { type: 'json_object' },
+  });
+
+  let player;
+  try {
+    player = JSON.parse(completion.choices[0].message.content);
+  } catch {
+    console.error('Failed to parse GPT response as JSON:');
+    console.error(completion.choices[0].message.content);
+    process.exit(1);
+  }
+
+  // Attach metadata comment fields to match existing schema
+  player._riskTolerance      = 'aggressive | conservative | calculated — how boldly the AI wagers on Daily Doubles (not yet active)';
+  player._buzzAggressiveness = '0.0–2.0 multiplier on per-question buzz probability (not yet active)';
+  player._reactionVoice      = 'clinical | snarky | warm | dramatic — tone of result message feedback (not yet active)';
+
+  console.log(`\nGenerated player: ${player.name}`);
+  console.log(`  Accuracy: ${player.accuracy}  Speed: ${player.speed}  Voice: ${player.reactionVoice}`);
+  console.log(`  Personality: ${player.personality.slice(0, 80)}…`);
+
+  // Append to players.json
+  const all = JSON.parse(fs.readFileSync(PLAYERS_FILE, 'utf8'));
+  const exists = all.find(p => p.name.toLowerCase() === player.name.toLowerCase());
+  if (exists) {
+    console.warn(`\n  Warning: a player named "${player.name}" already exists — not appending.`);
+    console.warn(`  Use --name "${player.name}" --replace to regenerate their portrait.\n`);
+  } else {
+    all.push(player);
+    fs.writeFileSync(PLAYERS_FILE, JSON.stringify(all, null, 2));
+    console.log(`\n  Appended to players.json`);
+  }
+
+  // Generate portrait
+  console.log('');
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  await generatePortrait(player);
+  console.log(`\nDone. Restart the server to see ${player.name} in the player select screen.\n`);
+}
+
+// ── main ──────────────────────────────────────────────────────────────────────
 async function main() {
   if (!process.env.OPENAI_API_KEY) {
     console.error('ERROR: OPENAI_API_KEY is not set in .env');
     process.exit(1);
   }
 
-  const all       = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'players.json'), 'utf8'));
+  if (createBrief) {
+    await createPlayer(createBrief);
+    return;
+  }
+
+  if (genHost) {
+    fs.mkdirSync(path.join(__dirname, 'public', 'images'), { recursive: true });
+    const outPath = path.join(__dirname, 'public', 'images', 'host.png');
+    if (!replace && fs.existsSync(outPath)) {
+      console.log('  [skip] host portrait already exists (use --replace to overwrite)');
+      return;
+    }
+    console.log(`\n  [gen]  ${HOST.name}…`);
+    const response = await client.images.generate({
+      model:   'dall-e-3',
+      prompt:  buildPortraitPrompt(HOST),
+      n:       1,
+      size:    '1024x1024',
+      quality: 'standard',
+    });
+    await downloadImage(response.data[0].url, outPath);
+    console.log(`  [ok]   saved → public/images/host.png\n`);
+    return;
+  }
+
+  const all       = JSON.parse(fs.readFileSync(PLAYERS_FILE, 'utf8'));
   const aiPlayers = all.filter(p => !p.isHuman);
 
   let targets = aiPlayers;
@@ -97,11 +213,24 @@ async function main() {
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  for (const player of targets) {
-    await generateForPlayer(player);
+  if (!replace) {
+    const missing = targets.filter(p => !fs.existsSync(path.join(OUTPUT_DIR, `${slugify(p.name)}.png`)));
+    const have    = targets.length - missing.length;
+    if (have > 0) console.log(`\n  ${have} player${have !== 1 ? 's' : ''} already have portraits — skipping (use --replace to regenerate)\n`);
+    targets = missing;
   }
 
-  console.log('\nDone.');
+  if (!targets.length) {
+    console.log('  Nothing to generate.\n');
+    return;
+  }
+
+  console.log(`\nGenerating ${targets.length} portrait${targets.length !== 1 ? 's' : ''}…\n`);
+  for (const player of targets) {
+    await generatePortrait(player);
+  }
+
+  console.log('\nDone.\n');
 }
 
 main().catch(err => {

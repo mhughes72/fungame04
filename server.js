@@ -3,6 +3,7 @@ const express = require('express');
 const OpenAI  = require('openai');
 const path    = require('path');
 const fs      = require('fs');
+const { normaliseAnswer, answerLeaksIntoClue } = require('./utils');
 
 const app = express();
 app.use(express.json());
@@ -40,9 +41,7 @@ app.get('/api/categories', async (req, res) => {
     const avoidAnswers    = usedAnswers.length
       ? `\nIMPORTANT: The following answers have appeared recently — do NOT design categories that would rely heavily on them: ${usedAnswers.slice(-30).join(', ')}.`
       : '';
-    const avoidCategories = usedCategories.length
-      ? `\nDo NOT reuse or closely overlap with these recent category themes: ${usedCategories.slice(-30).join(', ')}.`
-      : '';
+    const avoidCategories = avoidCategoriesClause(usedCategories);
     const completion = await client.chat.completions.create({
       model: 'gpt-4o',
       max_tokens: 300,
@@ -88,15 +87,6 @@ function recordCategories(names) {
   fs.writeFileSync(USED_CATEGORIES_FILE, JSON.stringify(updated, null, 2));
 }
 
-function normaliseAnswer(answer) {
-  return answer
-    .replace(/\(.*?\)/g, '')           // strip parentheticals
-    .replace(/[^a-zA-Z0-9\s'-]/g, '')  // strip punctuation
-    .trim()
-    .replace(/^(the|a|an)\s+/i, '')    // strip leading articles
-    .split(/\s+/).slice(0, 3).join(' ');// keep first 3 words
-}
-
 function recordAnswers(answers) {
   const list = loadUsedAnswers();
   const normalised = answers.map(normaliseAnswer).filter(Boolean);
@@ -110,14 +100,12 @@ app.post('/api/record-answers', (req, res) => {
   res.json({ ok: true });
 });
 
-const STOP_WORDS = new Set(['the','a','an','of','in','on','at','to','for','and','or','is','was','are','were','be','been','by','with','as','this','that','it','its']);
+function avoidAnswersClause(list) {
+  return list.length ? `\nDo NOT use any of these recently used answers: ${list.slice(-30).join(', ')}.` : '';
+}
 
-function answerLeaksIntoClue(clue, answer) {
-  const normalise   = s => s.toLowerCase().replace(/[-]/g, ' ').replace(/[^a-z0-9\s]/g, '');
-  const clueWords   = normalise(clue).split(/\s+/).filter(w => w.length >= 4 && !STOP_WORDS.has(w));
-  const answerWords = normalise(answer).split(/\s+/).filter(w => w.length >= 4 && !STOP_WORDS.has(w));
-  // Flag exact matches AND stem overlaps (e.g. "marx" in clue leaks "marxism" as answer)
-  return answerWords.some(aw => clueWords.some(cw => aw === cw || aw.includes(cw) || cw.includes(aw)));
+function avoidCategoriesClause(list) {
+  return list.length ? `\nDo NOT reuse or closely overlap with these recent category themes: ${list.slice(-30).join(', ')}.` : '';
 }
 
 async function rewriteLeakingClue(clue) {
@@ -179,10 +167,7 @@ Return JSON only.`,
       {
         role: 'user',
         content: (() => {
-          const usedAnswers = loadUsedAnswers();
-          const avoidClause = usedAnswers.length
-            ? `\nDo NOT use any of these recently used answers: ${usedAnswers.slice(-30).join(', ')}.`
-            : '';
+          const avoidClause = avoidAnswersClause(loadUsedAnswers());
           const valueList = round === 2 ? '$400, $800, $1200, $1600, $2000' : '$200, $400, $600, $800, $1000';
           const clueValues = round === 2 ? [400, 800, 1200, 1600, 2000] : [200, 400, 600, 800, 1000];
           return `Write 5 Jeopardy clues for the category "${name}" at values ${valueList}.${avoidClause} Return JSON:
@@ -229,14 +214,8 @@ Return JSON only.`,
 // Generate one Final Jeopardy clue
 app.get('/api/final-jeopardy', async (req, res) => {
   try {
-    const usedAnswers    = loadUsedAnswers();
-    const usedCategories = loadUsedCategories();
-    const avoidAnswers   = usedAnswers.length
-      ? `\nDo NOT use any of these recently used answers: ${usedAnswers.slice(-30).join(', ')}.`
-      : '';
-    const avoidCategories = usedCategories.length
-      ? `\nDo NOT reuse or closely overlap with these recent category themes: ${usedCategories.slice(-30).join(', ')}.`
-      : '';
+    const avoidAnswers    = avoidAnswersClause(loadUsedAnswers());
+    const avoidCategories = avoidCategoriesClause(loadUsedCategories());
 
     const completion = await client.chat.completions.create({
       model: 'gpt-4o',
@@ -270,7 +249,7 @@ app.get('/api/final-jeopardy', async (req, res) => {
 });
 
 // Base miss probability by dollar value for a perfect (accuracy=1.0) player
-const BASE_MISS = { 200: 0.05, 400: 0.15, 600: 0.30, 800: 0.45, 1000: 0.60 };
+const BASE_MISS = { 200: 0.03, 400: 0.10, 600: 0.20, 800: 0.32, 1000: 0.45 };
 
 // Generate an AI player's answer
 app.post('/api/ai-answer', async (req, res) => {
@@ -367,6 +346,47 @@ Return JSON with fields: "correct" (boolean), "needsClarification" (boolean), "m
     res.json(json);
   } catch (err) {
     console.error('Judge error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Host commentary ──────────────────────────────────────────────────────────
+const HOST_SYSTEM = `You are Chuck Pendleton, the charismatic host of "Definitely Not an AI Rip-Off of Jeopardy!", a late-1970s network television game show.
+Speak in exactly one short sentence. Punchy, warm, slightly cheesy — classic wide-lapel-suit game show host energy.
+React specifically and entertainingly to the situation you're given.
+Never say "Great job", "Well done", "Fantastic", or any other generic praise. Never be boring.`;
+
+const HOST_PROMPTS = {
+  correct_notable: ({ player, category, value }) =>
+    `${player} just correctly answered a $${value} clue in the category "${category}". React with host energy — brief, specific, a little theatrical.`,
+
+  wrong_easy: ({ player, category, value }) =>
+    `${player} just got the $${value} clue in "${category}" wrong — one of the easier ones on the board. React with gentle commiseration and a touch of disbelief.`,
+
+  fj_wager: ({ player, wager, score }) =>
+    `${player} (current score: $${score.toLocaleString()}) just locked in a Final Jeopardy wager of $${wager.toLocaleString()}. React as a game show host revealing this wager to the studio audience.`,
+
+  game_over: ({ winner, score }) =>
+    `${winner} just won the game with a final score of $${score.toLocaleString()}. Give a warm, slightly over-the-top game show closing line. One sentence.`,
+};
+
+app.post('/api/host-comment', async (req, res) => {
+  const { event, context = {} } = req.body;
+  if (!HOST_PROMPTS[event]) return res.status(400).json({ error: 'Unknown event' });
+
+  try {
+    const completion = await client.chat.completions.create({
+      model:       'gpt-4o-mini',
+      max_tokens:  80,
+      temperature: 0.9,
+      messages: [
+        { role: 'system', content: HOST_SYSTEM },
+        { role: 'user',   content: HOST_PROMPTS[event](context) },
+      ],
+    });
+    res.json({ line: completion.choices[0].message.content.trim().replace(/^"|"$/g, '') });
+  } catch (err) {
+    console.error('Host comment error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

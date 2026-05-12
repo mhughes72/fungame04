@@ -1,4 +1,4 @@
-# AI Jeopardy!
+# Definitely not an AI rip-off of Jeopardy!
 
 A Jeopardy game where you compete against AI contestants. Categories and clues are generated fresh each game by GPT-4o. You answer by speaking — the game listens and judges your response.
 
@@ -28,7 +28,7 @@ When you open the game an opponent selection screen appears. Pick exactly **2 AI
 To limit which AI players appear in the selection screen, pass `--players` when starting the server:
 
 ```
-node server.js --players "HAL 9000,Roxie"
+node server.js --players "Rick Donovan,Debbie Fontaine"
 ```
 
 Names are case-sensitive and must match exactly what's in `public/players.json`. The human player is always included automatically.
@@ -36,7 +36,7 @@ Names are case-sensitive and must match exactly what's in `public/players.json`.
 You can also set a `PLAYERS` environment variable instead of the CLI flag — useful for hosted deployments:
 
 ```
-PLAYERS="HAL 9000,Deep Blue" node server.js
+PLAYERS="Rick Donovan,Carol Ashworth" node server.js
 ```
 
 ## Gameplay
@@ -78,28 +78,48 @@ After Double Jeopardy, all players compete in one final clue:
 
 ## AI Players
 
-Each AI has a distinct personality and playstyle defined in `public/players.json`. Portrait images are shown on the opponent selection screen and in the scoreboard during play.
+Each AI is a human game-show contestant with a distinct personality and playstyle defined in `public/players.json`. Portrait images are shown on the opponent selection screen and in the scoreboard during play. Portraits are generated in a 1970s–1980s network TV photographic style (warm Kodachrome film, studio lighting).
 
 | Player | Strengths | Weaknesses | Style |
 |---|---|---|---|
-| HAL 9000 🤖 | Science | Pop culture, sports | Fast, high accuracy, goes for big value |
-| Deep Blue ♟️ | History, sports, geography | Pop culture | Medium speed, sweeps categories |
-| The Professor 🎓 | Arts, history, science | Sports, pop culture | Slow but very accurate, big value hunter |
-| Roxie 💅 | Pop culture, food | Science, history | Fast, aggressive, random tile selection |
-| ARIA 🎲 | Nothing in particular | Nothing in particular | Buzzes on everything, chaotic wildcard |
+| Rick Donovan 🚀 | Science | Pop culture, sports | Fast, high accuracy, goes for big value |
+| Carol Ashworth 📚 | History, sports, geography | Pop culture | Medium speed, sweeps categories |
+| Dr. Edmund Fitch 🎓 | Arts, history, science | Sports, pop culture | Slow but very accurate, big value hunter |
+| Debbie Fontaine 💅 | Pop culture, food | Science, history | Fast, aggressive, random tile selection |
+| Dale Kowalski 🔧 | Nothing in particular | Nothing in particular | Buzzes on everything, chaotic wildcard |
+| Bobol Programer 🖥️ | Science | Sports, arts | Medium speed, calculated, big value hunter |
 
 ### Generating Player Images
 
-Player portrait images are stored in `public/images/players/`. To regenerate them (uses DALL-E 3):
+Player portrait images are stored in `public/images/players/`. To generate them (uses DALL-E 3, requires server to be stopped):
 
 ```
-node generate-player-images.js                    # all AI players, skips existing
-node generate-player-images.js --name "Roxie"     # one player only
-node generate-player-images.js --replace          # regenerate all
-node generate-player-images.js --name "HAL 9000" --replace
+node generate-player-images.js                             # all players missing a portrait
+node generate-player-images.js --name "Debbie Fontaine"    # one player only
+node generate-player-images.js --replace                   # regenerate everyone
+node generate-player-images.js --name "Dale Kowalski" --replace
+node generate-player-images.js --host                      # generate host portrait (public/images/host.png)
 ```
 
 Images are derived from each player's `appearance` and `personality` fields in `players.json`.
+
+### Creating a New Player
+
+Generate a fully-configured player from a plain-English description:
+
+```
+node generate-player-images.js --create "a nervous librarian from Ohio who knows everything about classic literature"
+```
+
+This calls GPT-4o to produce a complete player JSON (name, stats, specialties, personality, appearance), appends it to `players.json`, and generates a DALL-E portrait. Restart the server after running to see the new player in the selection screen.
+
+Some examples:
+
+```
+node generate-player-images.js --create "a retired rodeo cowboy from Amarillo, confident about everything"
+node generate-player-images.js --create "a competitive crossword champion who freezes under pressure"
+node generate-player-images.js --create "a diner waitress from New Jersey who has seen it all"
+```
 
 ### AI Player Parameters (`players.json`)
 
@@ -117,6 +137,38 @@ Images are derived from each player's `appearance` and `personality` fields in `
 | `riskTolerance` | string | `aggressive` `conservative` `calculated` | Final Jeopardy wagering style. |
 | `buzzAggressiveness` | number | 0.0–2.0 | *(not yet active)* Multiplier on per-question buzz probability. |
 | `reactionVoice` | string | `clinical` `snarky` `warm` `dramatic` | *(not yet active)* Tone of AI result message feedback. |
+
+## Host Commentary
+
+**Chuck Pendleton** hosts the show from a fixed corner panel (bottom-left) that floats above all game screens. Commentary fires automatically throughout the game — no setup required.
+
+Two types of lines:
+
+- **Lookup table** — instant canned lines for timing-sensitive moments (buzz window, correct/wrong answers, Daily Double reveal, round transitions). Several variants per event, picked at random. Some events fire at reduced probability so commentary doesn't become repetitive.
+- **GPT-generated** — context-aware one-liners for moments where the specific game state matters: correct answers on $600+ clues (mentions the player and category), wrong answers on $200–$400 clues (gentle dig), Final Jeopardy wager reveal, and the game-over closing line. Fired async so they never block gameplay — the line appears a beat after the event.
+
+| Event | Type | Notes |
+|---|---|---|
+| Game start | Lookup | Fires once when the board loads |
+| Buzz window opens | Lookup | 35% chance — not every clue |
+| Correct answer (≤$400) | Lookup | Generic congratulations |
+| Correct answer (≥$600) | GPT | Names the player and category |
+| Wrong answer (≥$600) | Lookup | Generic commiseration |
+| Wrong answer (≤$400) | GPT | Gentle dig at the player |
+| No buzz / timeout | Lookup | 65% chance |
+| Daily Double | Lookup | Always fires |
+| Double Jeopardy | Lookup | Always fires |
+| Final Jeopardy | Lookup | Always fires |
+| FJ wager locked | GPT | Reacts to the specific wager amount |
+| Game over | GPT | Names the winner and score |
+
+### Generating the Host Portrait
+
+```
+node generate-player-images.js --host
+```
+
+Saves to `public/images/host.png`. Uses the same 1970s Kodachrome TV style as the player portraits. If no portrait is present, the host panel shows without an image and commentary still works.
 
 ## Post-Game Breakdown
 
@@ -172,9 +224,24 @@ Covers: R2 values, difficulty calibration vs Round 1, clue quality, category fre
 
 Results export to timestamped `eval-results-*.json` / `eval-r2-results-*.json` files.
 
+## Visual Style
+
+The game renders with a CRT television aesthetic:
+
+- **Scanlines** — semi-transparent horizontal stripes overlaid at full viewport size
+- **Vignette** — darkened edges simulating the curved glass of a tube TV
+- **Phosphor glow** — text-shadow bloom on gold scores, category headers, and key banners
+- **Grain** — subtle SVG `feTurbulence` noise texture at low opacity
+- **Flicker** — occasional brightness dip (~once every 8 seconds) via CSS animation
+- **Screen edge shadow** — outer ambient glow + inner depth shadow on the body element
+- **Chromatic aberration** — slight red/blue lateral offset on the main title and winner headline
+- **Dark bezel** — `html` background is near-black so the page looks like a screen in a cabinet
+
+All effects are pure CSS — no canvas, no JS.
+
 ## Tech Stack
 
 - **Backend**: Node.js + Express
-- **AI**: OpenAI GPT-4o (category + clue generation), o4-mini (fact-checking), GPT-4o-mini (AI answers + judging), DALL-E 3 (player portraits)
+- **AI**: OpenAI GPT-4o (category + clue generation, new player creation), o4-mini (fact-checking), GPT-4o-mini (AI answers, judging, host commentary), DALL-E 3 (player and host portraits)
 - **Speech**: Web Speech API (Chrome / Safari)
 - **Frontend**: Vanilla JS, no framework
