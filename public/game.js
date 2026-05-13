@@ -137,9 +137,16 @@ const api = {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Host Commentary ───────────────────────────────────────────────────────────
-const hostPanel    = document.getElementById('host-panel');
 const hostLineEl   = document.getElementById('host-line');
 let   hostTimer    = null;
+
+function updateStripOffset() {
+  const h = (document.querySelector('header')?.offsetHeight ?? 0)
+          + (document.getElementById('top-strip')?.offsetHeight ?? 0);
+  document.documentElement.style.setProperty('--strip-top', h + 'px');
+}
+updateStripOffset();
+window.addEventListener('resize', updateStripOffset);
 
 const HOST_LINES = {
   game_start: [
@@ -203,8 +210,7 @@ const HOST_LINES = {
 function showHostLine(line) {
   clearTimeout(hostTimer);
   hostLineEl.textContent = line;
-  hostPanel.classList.remove('hidden');
-  hostTimer = setTimeout(() => hostPanel.classList.add('hidden'), 5500);
+  hostTimer = setTimeout(() => { hostLineEl.textContent = ''; }, 5500);
 }
 
 function hostLookup(event, chance = 1.0) {
@@ -231,16 +237,15 @@ function buildScoreboard() {
     const card = document.createElement('div');
     card.className = 'player-card' + (p.isHuman ? ' human' : '');
     card.id = `player-card-${i}`;
-    if (!p.isHuman) {
-      const avatarDiv = document.createElement('div');
-      avatarDiv.className = 'player-avatar';
-      avatarDiv.appendChild(playerImgEl(p, 'player-avatar-img'));
-      card.appendChild(avatarDiv);
-    }
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'player-avatar';
+    avatarDiv.appendChild(playerImgEl(p, 'player-avatar-img'));
+    card.appendChild(avatarDiv);
     card.insertAdjacentHTML('beforeend', `<div class="player-name">${p.name}</div><div class="player-score" id="pscore-${i}">$0</div><div class="turn-label">▶ your turn</div>`);
     sb.appendChild(card);
     scoreEls.push(card.querySelector('.player-score'));
   });
+  updateStripOffset();
 }
 
 function updateScore(playerIdx, delta) {
@@ -257,6 +262,17 @@ function refreshLeader() {
     document.getElementById(`player-card-${i}`)
       .classList.toggle('leader', max > 0 && scores[i] === max);
   });
+}
+
+function animateCard(playerIdx, type) {
+  const card = document.getElementById(`player-card-${playerIdx}`);
+  if (!card) return;
+  card.classList.remove('react-buzz', 'react-correct', 'react-wrong');
+  void card.offsetWidth; // force reflow so re-adding the class restarts the animation
+  card.classList.add(`react-${type}`);
+  card.addEventListener('animationend', () => {
+    card.classList.remove(`react-${type}`);
+  }, { once: true });
 }
 
 function slugify(name) {
@@ -628,6 +644,7 @@ function startAITimers() {
       clueOpen = false;
       cancelAITimers();
       clearBuzzTimer();
+      animateCard(playerIdx, 'buzz');
       handleAIBuzz(playerIdx);
     }, delay));
   });
@@ -852,6 +869,7 @@ buzzBtn.addEventListener('click', () => {
   clueOpen = false;
   cancelAITimers();
   clearBuzzTimer();
+  animateCard(0, 'buzz');
   startListening();
 });
 
@@ -909,6 +927,7 @@ async function submitClarifiedAnswer(spokenText, value) {
 function showResult(playerIdx, correct, message, correctAnswer, value) {
   const { ci, vi } = activeCell;
   attemptedPlayers.add(playerIdx);
+  animateCard(playerIdx, correct ? 'correct' : 'wrong');
   updateScore(playerIdx, correct ? value : -value);
 
   // ── Stats ──

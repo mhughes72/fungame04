@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Definitely not an AI rip-off of Jeopardy!</title>
+  <title>Not Jeopardy</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header>
-    <h1>Definitely not an AI rip-off of Jeopardy!</h1>
+    <h1>Not Jeopardy</h1>
     <button id="cheat-btn">Cheat</button>
   </header>
 
@@ -24,14 +24,15 @@
     </div>
   </div>
 
-  <div id="scoreboard"></div>
-
-  <div id="host-panel" class="hidden">
-    <img id="host-portrait" src="/images/host.png" alt="Chuck Pendleton">
-    <div id="host-bubble">
+  <div id="top-strip">
+    <div id="host-card">
+      <div class="player-avatar">
+        <img id="host-portrait" src="/images/host.png" alt="Chuck Pendleton" class="player-avatar-img">
+      </div>
       <div id="host-speaker">CHUCK PENDLETON</div>
       <div id="host-line"></div>
     </div>
+    <div id="scoreboard"></div>
   </div>
 
   <main>

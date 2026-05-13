@@ -25,8 +25,15 @@ const nameIdx     = args.indexOf('--name');
 const targetName  = nameIdx !== -1 ? args[nameIdx + 1] : null;
 const replace     = args.includes('--replace');
 const genHost     = args.includes('--host');
+const genYou      = args.includes('--you');
 const createIdx   = args.indexOf('--create');
 const createBrief = createIdx !== -1 ? args[createIdx + 1] : null;
+
+const YOU = {
+  name:        'You',
+  personality: 'A mystery contestant — could be anyone. Confident, eager, unknowable.',
+  appearance:  'A stylized silhouette of a game show contestant seen from the front, head and shoulders, against a warm studio backdrop. The figure is a solid dark shape with no facial features — just a clean human outline with a faint warm glow around the edges as if backlit by studio lights. The silhouette wears a collared shirt visible at the shoulders. A subtle "?" glows softly on the chest, rendered like a sequined name-tag badge. 1970s TV aesthetic, warm Kodachrome tones, slight film grain.',
+};
 
 const HOST = {
   name:        'Chuck Pendleton',
@@ -38,16 +45,8 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-function downloadImage(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https.get(url, res => {
-      if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
-      res.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-      file.on('error', reject);
-    }).on('error', reject);
-  });
+function saveBase64Image(b64, dest) {
+  fs.writeFileSync(dest, Buffer.from(b64, 'base64'));
 }
 
 // ── Portrait prompt ───────────────────────────────────────────────────────────
@@ -73,14 +72,14 @@ async function generatePortrait(player) {
 
   console.log(`  [gen]  ${player.name}…`);
   const response = await client.images.generate({
-    model:   'dall-e-3',
+    model:   'gpt-image-1',
     prompt:  buildPortraitPrompt(player),
     n:       1,
     size:    '1024x1024',
-    quality: 'standard',
+    quality: 'medium',
   });
 
-  await downloadImage(response.data[0].url, outPath);
+  saveBase64Image(response.data[0].b64_json, outPath);
   console.log(`  [ok]   saved → ${path.relative(__dirname, outPath)}`);
 }
 
@@ -178,6 +177,26 @@ async function main() {
     return;
   }
 
+  if (genYou) {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    const outPath = path.join(OUTPUT_DIR, 'you.png');
+    if (!replace && fs.existsSync(outPath)) {
+      console.log('  [skip] "you" portrait already exists (use --replace to overwrite)');
+      return;
+    }
+    console.log(`\n  [gen]  You (mystery contestant)…`);
+    const response = await client.images.generate({
+      model:   'gpt-image-1',
+      prompt:  buildPortraitPrompt(YOU),
+      n:       1,
+      size:    '1024x1024',
+      quality: 'medium',
+    });
+    saveBase64Image(response.data[0].b64_json, outPath);
+    console.log(`  [ok]   saved → public/images/players/you.png\n`);
+    return;
+  }
+
   if (genHost) {
     fs.mkdirSync(path.join(__dirname, 'public', 'images'), { recursive: true });
     const outPath = path.join(__dirname, 'public', 'images', 'host.png');
@@ -187,13 +206,13 @@ async function main() {
     }
     console.log(`\n  [gen]  ${HOST.name}…`);
     const response = await client.images.generate({
-      model:   'dall-e-3',
+      model:   'gpt-image-1',
       prompt:  buildPortraitPrompt(HOST),
       n:       1,
       size:    '1024x1024',
-      quality: 'standard',
+      quality: 'medium',
     });
-    await downloadImage(response.data[0].url, outPath);
+    saveBase64Image(response.data[0].b64_json, outPath);
     console.log(`  [ok]   saved → public/images/host.png\n`);
     return;
   }
