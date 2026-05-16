@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const OpenAI  = require('openai');
+const { wrapOpenAI } = require('langsmith/wrappers');
 const path    = require('path');
 const fs      = require('fs');
 const { normaliseAnswer, answerLeaksIntoClue } = require('./utils');
@@ -14,7 +15,7 @@ if (!process.env.OPENAI_API_KEY) {
   process.exit(1);
 }
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = wrapOpenAI(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
 
 // Parse --players "Name1,Name2" from CLI args, or fall back to PLAYERS env var
 const playersFlagIdx = process.argv.indexOf('--players');
