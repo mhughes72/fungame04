@@ -127,7 +127,7 @@ async function rewriteLeakingClue(clue) {
 async function factCheckClue(clue) {
   const completion = await client.chat.completions.create({
     model: 'o4-mini',
-    max_tokens: 500,
+    max_completion_tokens: 500,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: 'You are an independent fact-checker for Jeopardy clues. The clue was written by a different AI model — your job is to verify it skeptically, not confirm it. Return JSON only.' },
