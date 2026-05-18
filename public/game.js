@@ -230,25 +230,35 @@ function hostGPT(event, context) {
 const gameSounds = {};
 
 const SOUND_EVENTS = [
-  'correct', 'wrong', 'buzz', 'daily-double',
+  'correct', 'correct-voice', 'wrong', 'wrong-voice', 'buzz', 'daily-double',
   'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over',
 ];
 
 async function loadGameSounds() {
-  await Promise.all(SOUND_EVENTS.map(async event => {
-    try {
-      const res = await fetch(`/sounds/${event}.mp3`, { method: 'HEAD' });
-      if (!res.ok) return;
-      const audio = new Audio(`/sounds/${event}.mp3`);
-      audio.load();
-      gameSounds[event] = audio;
-    } catch { /* sound absent — silent fallback */ }
-  }));
+  try {
+    const res = await fetch('/sounds/manifest.json');
+    if (!res.ok) return;
+    const manifest = await res.json();
+    await Promise.all(Object.entries(manifest.active ?? {}).map(async ([event, pool]) => {
+      const keys = Array.isArray(pool) ? pool : [pool];
+      const audios = (await Promise.all(keys.map(async key => {
+        try {
+          const r = await fetch(`/sounds/candidates/${key}.mp3`, { method: 'HEAD' });
+          if (!r.ok) return null;
+          const audio = new Audio(`/sounds/candidates/${key}.mp3`);
+          audio.load();
+          return audio;
+        } catch { return null; }
+      }))).filter(Boolean);
+      if (audios.length) gameSounds[event] = audios;
+    }));
+  } catch { /* no manifest — all sounds silent */ }
 }
 
 function playSound(event) {
-  const audio = gameSounds[event];
-  if (!audio) return;
+  const pool = gameSounds[event];
+  if (!pool?.length) return;
+  const audio = pool[Math.floor(Math.random() * pool.length)];
   audio.currentTime = 0;
   audio.play().catch(() => {});
 }
@@ -986,6 +996,7 @@ function showResult(playerIdx, correct, message, correctAnswer, value) {
   attemptedPlayers.add(playerIdx);
   animateCard(playerIdx, correct ? 'correct' : 'wrong');
   playSound(correct ? 'correct' : 'wrong');
+  playSound(correct ? 'correct-voice' : 'wrong-voice');
   updateScore(playerIdx, correct ? value : -value);
 
   // ── Stats ──

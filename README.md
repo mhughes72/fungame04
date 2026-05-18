@@ -183,40 +183,53 @@ After Final Jeopardy, a breakdown screen shows:
 
 ## Sound Effects
 
-Game sounds are pre-generated offline using `sounds.js` and served as static files. The game loads whatever is present at startup and falls back to silence for anything missing — all sounds are optional.
+Game sounds are pre-generated offline using `sounds.js`. Every event supports a **pool** — the game picks randomly from the pool each time the event fires. Pools of one always play the same sound. All sounds are optional; the game falls back to silence for any event with no active pool.
 
-**Generate sounds:**
+**Generate candidates:**
 
 ```bash
 # SFX from a text prompt (ElevenLabs sound-generation)
-node sounds.js sfx "triumphant game show ding, correct answer, brass hit" --name correct --duration 2
-node sounds.js sfx "harsh buzzer, wrong answer, classic 1970s TV" --name wrong --duration 2
-node sounds.js sfx "exciting daily double fanfare, game show stinger" --name daily-double --duration 3
+node sounds.js sfx "triumphant game show ding, correct answer" --name correct --duration 2
+node sounds.js sfx "harsh wrong answer buzzer, 1970s TV" --name wrong --duration 2
+node sounds.js sfx "exciting daily double fanfare" --name daily-double --duration 3
 
 # Spoken lines using your host voice (ElevenLabs TTS)
+node sounds.js tts "That is correct!" --name correct-voice --variants 5
 node sounds.js tts "Daily Double!" --name daily-double
 node sounds.js tts "Double Jeopardy!" --name double-jeopardy
 node sounds.js tts "Final Jeopardy!" --name final-jeopardy
-
-# Generate multiple takes to compare
-node sounds.js sfx "wrong answer buzzer" --name wrong --variants 3
 ```
 
-**Review and adopt:**
+**Preview and activate:**
 
 ```bash
-node sounds.js list           # show all candidates and active sounds
-node sounds.js preview wrong-2  # play a candidate (opens system audio player)
-node sounds.js use wrong-2      # promote to active — copies to public/sounds/wrong.mp3
-node sounds.js clear wrong      # remove active sound, game goes silent for that event
+node sounds.js list                   # show all candidates and active pools
+node sounds.js preview correct-voice-2  # play a candidate
+
+node sounds.js use correct-5          # set correct pool to just correct-5
+node sounds.js use correct-voice-1    # set correct-voice pool to just correct-voice-1
+node sounds.js add correct-voice-3    # add to pool — game now picks randomly between 1 and 3
+node sounds.js add correct-voice-5    # pool is now 3 deep
 ```
+
+**Modify pools:**
+
+```bash
+node sounds.js remove correct-voice-3   # remove from pool, keep the file
+node sounds.js clear correct-voice      # empty the pool entirely (keeps files)
+node sounds.js clear correct-voice-2    # delete a candidate file and remove from pool
+```
+
+**Layering:** `correct` and `correct-voice` (and `wrong` / `wrong-voice`) play simultaneously — use one for an SFX sting and the other for a spoken host reaction.
 
 **Supported events:**
 
 | Event | Fires when |
 |---|---|
 | `correct` | Any player answers correctly |
+| `correct-voice` | Any player answers correctly (layered with `correct`) |
 | `wrong` | Any player answers incorrectly |
+| `wrong-voice` | Any player answers incorrectly (layered with `wrong`) |
 | `buzz` | Human player buzzes in |
 | `timeout` | Buzz window expires with no answer |
 | `daily-double` | Daily Double tile is revealed |
@@ -224,7 +237,7 @@ node sounds.js clear wrong      # remove active sound, game goes silent for that
 | `final-jeopardy` | Final Jeopardy screen opens |
 | `game-over` | Post-game breakdown is shown |
 
-Candidates are saved to `public/sounds/candidates/`. Active sounds live at `public/sounds/{event}.mp3`. A `sounds-manifest.json` in the project root tracks what prompt generated each file.
+Candidates are saved to `public/sounds/candidates/`. The active pool configuration lives in `public/sounds/manifest.json`.
 
 ## Host Voice
 
