@@ -10,8 +10,32 @@
 
   <header>
     <h1>Not Jeopardy</h1>
-    <button id="cheat-btn">Cheat</button>
+    <div id="header-btns">
+      <button id="help-btn">Help</button>
+      <button id="about-btn">About</button>
+      <button id="cheat-btn">Cheat</button>
+    </div>
   </header>
+
+  <div id="about-overlay" class="hidden"></div>
+  <div id="about-modal" class="hidden">
+    <div id="about-inner">
+      <div id="about-title">About This Game</div>
+      <div id="about-body">
+        <p>A fully AI-generated Jeopardy-style game. Every category, clue, and answer is produced on demand — no question bank.</p>
+        <p><strong>Source:</strong> <a href="https://github.com/mhughes72/fungame04" target="_blank" rel="noopener">github.com/mhughes72/fungame04</a></p>
+        <div id="about-tech">
+          <div class="about-tech-row"><span class="about-tech-label">Clue generation</span><span class="about-tech-val">GPT-4o</span></div>
+          <div class="about-tech-row"><span class="about-tech-label">Fact-checking</span><span class="about-tech-val">o4-mini</span></div>
+          <div class="about-tech-row"><span class="about-tech-label">AI players &amp; judging</span><span class="about-tech-val">GPT-4o-mini</span></div>
+          <div class="about-tech-row"><span class="about-tech-label">Host commentary</span><span class="about-tech-val">GPT-4o-mini</span></div>
+          <div class="about-tech-row"><span class="about-tech-label">Host voice</span><span class="about-tech-val">ElevenLabs TTS</span></div>
+          <div class="about-tech-row"><span class="about-tech-label">Tracing</span><span class="about-tech-val">LangSmith</span></div>
+        </div>
+      </div>
+      <button id="about-close">Close</button>
+    </div>
+  </div>
 
   <div id="cheat-overlay" class="hidden"></div>
   <div id="cheat-modal" class="hidden">
@@ -21,6 +45,52 @@
       <button id="cheat-final-jeopardy">Skip to Final Jeopardy</button>
       <button id="cheat-end-game">End Game Now</button>
       <button id="cheat-close">Close</button>
+    </div>
+  </div>
+
+  <div id="help-overlay" class="hidden"></div>
+  <div id="help-modal" class="hidden">
+    <div id="help-inner">
+      <div id="help-title">How to Play</div>
+      <div id="help-body">
+
+        <div class="help-section">
+          <div class="help-section-title">The Board</div>
+          <p>Six categories, five clues each. Dollar values increase with difficulty — $200 is a gimme, $1000 will hurt. Click any tile to open a clue. You control the board until someone else answers correctly.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="help-section-title">Buzzing In</div>
+          <p>Read the clue, then hit <strong>BUZZ IN</strong> (or press <strong>Space</strong>) when you know it. Your two AI opponents are also reading — they'll buzz in on their own after a delay that depends on their speed and confidence. If you wait too long the window closes and the board moves on.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="help-section-title">Answering</div>
+          <p>Answers are spoken — your microphone opens automatically after you buzz. Just say your answer naturally; no need to phrase it as a question. You have a few seconds. The AI judge handles spelling variants, nicknames, and speech-recognition mishearings.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="help-section-title">Daily Double</div>
+          <p>Two tiles on the board are hidden Daily Doubles. When you land on one, you wager any amount up to your current score (minimum $5). Only you can answer — the AI opponents sit this one out.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="help-section-title">Double Jeopardy</div>
+          <p>After the first board is cleared the dollar values double and a fresh set of categories is generated. The player in last place picks first.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="help-section-title">Final Jeopardy</div>
+          <p>One category, one clue, 30 seconds. Everyone wagers blind before the clue is revealed. You answer by voice; the AI opponents answer silently. Scores update one by one for maximum drama.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="help-section-title">AI Opponents</div>
+          <p>Each opponent has a different accuracy rating and buzz speed. Higher-dollar clues trip them up more often. They can also be wrong — if they miss, the clue stays open for others to steal.</p>
+        </div>
+
+      </div>
+      <button id="help-close">Got it</button>
     </div>
   </div>
 

@@ -226,6 +226,30 @@ function hostGPT(event, context) {
     .catch(() => {});
 }
 
+// ── Category TTS (host reads category name) ───────────────────────────────────
+const categoryTts = new Map(); // category name → HTMLAudioElement
+
+async function prefetchCategoryTTS(categories) {
+  await Promise.all(categories.map(async name => {
+    try {
+      const res = await fetch(`/api/tts?text=${encodeURIComponent(name)}`);
+      if (!res.ok) return;
+      const blob  = await res.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audio.volume = 0.9;
+      categoryTts.set(name, audio);
+    } catch { /* non-critical */ }
+  }));
+}
+
+function playCategoryTTS(name) {
+  const audio = categoryTts.get(name);
+  if (!audio) return;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+
 // ── Scoreboard ──
 const scoreEls = [];
 
@@ -391,6 +415,7 @@ async function init() {
     setTimeout(() => loadingScreen.remove(), 400);
 
     loadAllCategories(1);
+    prefetchCategoryTTS(CATEGORIES);
   } catch (err) {
     document.querySelector('#loading-inner p').textContent = 'Failed to load. Check server.';
     console.error(err);
@@ -525,6 +550,7 @@ function openModal(ci, vi) {
   transcriptDisp.textContent = '';
   overlay.classList.remove('hidden');
   modal.classList.remove('hidden');
+  playCategoryTTS(CATEGORIES[ci]);
 
   tileSelectorIdx = boardController;
 
@@ -1087,6 +1113,8 @@ async function startDoubleJeopardy() {
   stumpedCount = 0;
 
   loadAllCategories(2);
+  categoryTts.clear();
+  prefetchCategoryTTS(CATEGORIES);
 
   if (!PLAYERS[boardController].isHuman) aiSelectTile(boardController);
 }
@@ -1525,6 +1553,34 @@ function showBreakdown() {
   document.getElementById('play-again-btn').addEventListener('click', () => location.reload());
   el.classList.remove('hidden');
 }
+
+// ── Help modal ──
+document.getElementById('help-btn').addEventListener('click', () => {
+  document.getElementById('help-overlay').classList.remove('hidden');
+  document.getElementById('help-modal').classList.remove('hidden');
+});
+
+function closeHelp() {
+  document.getElementById('help-overlay').classList.add('hidden');
+  document.getElementById('help-modal').classList.add('hidden');
+}
+
+document.getElementById('help-close').addEventListener('click', closeHelp);
+document.getElementById('help-overlay').addEventListener('click', closeHelp);
+
+// ── About modal ──
+document.getElementById('about-btn').addEventListener('click', () => {
+  document.getElementById('about-overlay').classList.remove('hidden');
+  document.getElementById('about-modal').classList.remove('hidden');
+});
+
+function closeAbout() {
+  document.getElementById('about-overlay').classList.add('hidden');
+  document.getElementById('about-modal').classList.add('hidden');
+}
+
+document.getElementById('about-close').addEventListener('click', closeAbout);
+document.getElementById('about-overlay').addEventListener('click', closeAbout);
 
 // ── Cheat menu ──
 document.getElementById('cheat-btn').addEventListener('click', () => {

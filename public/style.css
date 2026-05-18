@@ -152,7 +152,7 @@ body::after {
 /* ── Header ── */
 header {
   position: relative;
-  z-index: 60;
+  z-index: 95;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -161,10 +161,16 @@ header {
   border-bottom: 4px solid var(--gold);
 }
 
-#cheat-btn {
+#header-btns {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+#about-btn, #help-btn, #cheat-btn {
   background: transparent;
-  border: 1px solid #444;
-  color: #556;
+  border: 1px solid #667;
+  color: #aab;
   font-size: 0.7rem;
   font-family: 'Arial Black', Arial, sans-serif;
   letter-spacing: 2px;
@@ -172,10 +178,187 @@ header {
   padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+#about-btn:hover, #help-btn:hover, #cheat-btn:hover {
+  color: #fff;
+  border-color: #aab;
+  background: rgba(255,255,255,0.07);
+}
+
+#help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 96;
+}
+
+#help-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 97;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+#help-inner {
+  background: var(--blue-dark);
+  border: 2px solid var(--gold);
+  border-radius: 10px;
+  padding: 36px 40px;
+  max-width: 560px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#help-title {
+  font-size: 1rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-align: center;
+}
+
+#help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.help-section-title {
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  margin-bottom: 5px;
+}
+
+.help-section p {
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: #ccd;
+  font-family: Arial, sans-serif;
+  font-weight: normal;
+}
+
+.help-section p strong {
+  color: #fff;
+}
+
+#help-close {
+  background: transparent;
+  border: 1px solid #556;
+  color: #889;
+  font-size: 0.75rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 8px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  align-self: center;
   transition: color 0.2s, border-color 0.2s;
 }
 
-#cheat-btn:hover { color: #aaa; border-color: #888; }
+#help-close:hover { color: #fff; border-color: #aab; }
+
+#about-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 96;
+}
+
+#about-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 97;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#about-inner {
+  background: var(--blue-dark);
+  border: 2px solid var(--gold);
+  border-radius: 10px;
+  padding: 36px 40px;
+  max-width: 480px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#about-title {
+  font-size: 1rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-align: center;
+}
+
+#about-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #ccd;
+}
+
+#about-body a {
+  color: var(--gold-light);
+  text-decoration: none;
+}
+
+#about-body a:hover { text-decoration: underline; }
+
+#about-tech {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  border-top: 1px solid #334;
+  padding-top: 14px;
+}
+
+.about-tech-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+
+.about-tech-label { color: #889; }
+
+.about-tech-val {
+  color: var(--gold-light);
+  font-weight: bold;
+}
+
+#about-close {
+  background: transparent;
+  border: 1px solid #556;
+  color: #889;
+  font-size: 0.75rem;
+  font-family: 'Arial Black', Arial, sans-serif;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 8px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  align-self: center;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+#about-close:hover { color: #aaa; border-color: #888; }
 
 #cheat-overlay {
   position: fixed;

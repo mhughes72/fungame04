@@ -9,9 +9,10 @@ A Jeopardy game where you compete against AI contestants. Categories and clues a
    npm install
    ```
 
-2. Create a `.env` file in the root with your OpenAI API key:
+2. Create a `.env` file in the root with your API keys:
    ```
    OPENAI_API_KEY=sk-...
+   ELEVENLABS_API_KEY=sk-...   # optional — host voice; game runs fine without it
    ```
 
 3. Start the server:
@@ -180,6 +181,20 @@ After Final Jeopardy, a breakdown screen shows:
 - Longest answer streak
 - Highlights: stumped clues, category dominance, biggest Daily Double swing
 
+## Host Voice
+
+Chuck Pendleton's category announcements are spoken aloud using ElevenLabs TTS. When the board loads, all six category names are pre-generated in the background so audio is ready the instant a tile is clicked — no latency added to gameplay. If ElevenLabs is unavailable or the quota is exhausted the game continues silently.
+
+To use a custom voice, replace `HOST_VOICE_ID` in `server.js` with your ElevenLabs Voice ID (find it in your ElevenLabs dashboard under Voices).
+
+## Header Buttons
+
+Three buttons are always visible in the top-right header, even during the loading screen and player selection:
+
+- **Help** — full how-to-play guide covering buzzing, answering, Daily Doubles, rounds, and AI opponent behaviour
+- **About** — GitHub link and AI tech stack breakdown
+- **Cheat** — developer shortcuts (see below)
+
 ## Cheat Menu
 
 A **Cheat** button in the top-right header provides developer shortcuts:
@@ -243,5 +258,7 @@ All effects are pure CSS — no canvas, no JS.
 
 - **Backend**: Node.js + Express
 - **AI**: OpenAI GPT-4o (category + clue generation, new player creation), o4-mini (fact-checking), GPT-4o-mini (AI answers, judging, host commentary), DALL-E 3 (player and host portraits)
+- **Voice**: ElevenLabs TTS (host category announcements, pre-cached at board load)
 - **Speech**: Web Speech API (Chrome / Safari)
+- **Tracing**: LangSmith
 - **Frontend**: Vanilla JS, no framework

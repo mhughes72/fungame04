@@ -392,5 +392,44 @@ app.post('/api/host-comment', async (req, res) => {
   }
 });
 
+// ── Host TTS (ElevenLabs text-to-speech) ─────────────────────────────────────
+const HOST_VOICE_ID = 'lQgMO4VKveoqHDCZMAr1'; // custom host voice
+
+app.get('/api/tts', async (req, res) => {
+  const { text } = req.query;
+  if (!text) return res.status(400).json({ error: 'Missing text' });
+  if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'No ElevenLabs key' });
+
+  try {
+    const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${HOST_VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: { stability: 0.55, similarity_boost: 0.75 },
+      }),
+    });
+
+    if (!elRes.ok) {
+      const msg = await elRes.text();
+      console.error(`ElevenLabs TTS error for "${text}":`, msg);
+      return res.status(502).json({ error: msg });
+    }
+
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'no-store');
+    const buf = await elRes.arrayBuffer();
+    res.send(Buffer.from(buf));
+  } catch (err) {
+    console.error('TTS fetch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AI Jeopardy running at http://localhost:${PORT}`));
