@@ -226,6 +226,33 @@ function hostGPT(event, context) {
     .catch(() => {});
 }
 
+// ── Game sounds (pre-generated via sounds.js CLI) ────────────────────────────
+const gameSounds = {};
+
+const SOUND_EVENTS = [
+  'correct', 'wrong', 'buzz', 'daily-double',
+  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over',
+];
+
+async function loadGameSounds() {
+  await Promise.all(SOUND_EVENTS.map(async event => {
+    try {
+      const res = await fetch(`/sounds/${event}.mp3`, { method: 'HEAD' });
+      if (!res.ok) return;
+      const audio = new Audio(`/sounds/${event}.mp3`);
+      audio.load();
+      gameSounds[event] = audio;
+    } catch { /* sound absent — silent fallback */ }
+  }));
+}
+
+function playSound(event) {
+  const audio = gameSounds[event];
+  if (!audio) return;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
 // ── Category TTS (host reads category name) ───────────────────────────────────
 const categoryTts = new Map(); // category name → HTMLAudioElement
 
@@ -415,6 +442,7 @@ async function init() {
     setTimeout(() => loadingScreen.remove(), 400);
 
     loadAllCategories(1);
+    loadGameSounds();
     prefetchCategoryTTS(CATEGORIES);
   } catch (err) {
     document.querySelector('#loading-inner p').textContent = 'Failed to load. Check server.';
@@ -625,6 +653,7 @@ function startBuzzTimer() {
     if (!clueOpen) return;
     clueOpen = false;
     cancelAITimers();
+    playSound('timeout');
     clueExpired();
   }, duration);
 }
@@ -689,6 +718,7 @@ function openDailyDouble(ci, vi) {
   const maxBet      = Math.max(scores[selectorIdx], 1000);
 
   categoryLabel.textContent = `${CATEGORIES[ci]} — DAILY DOUBLE!`;
+  playSound('daily-double');
   hostLookup('daily_double');
   showPhase(phaseBet);
 
@@ -896,6 +926,7 @@ buzzBtn.addEventListener('click', () => {
   cancelAITimers();
   clearBuzzTimer();
   animateCard(0, 'buzz');
+  playSound('buzz');
   startListening();
 });
 
@@ -954,6 +985,7 @@ function showResult(playerIdx, correct, message, correctAnswer, value) {
   const { ci, vi } = activeCell;
   attemptedPlayers.add(playerIdx);
   animateCard(playerIdx, correct ? 'correct' : 'wrong');
+  playSound(correct ? 'correct' : 'wrong');
   updateScore(playerIdx, correct ? value : -value);
 
   // ── Stats ──
@@ -1081,6 +1113,7 @@ async function startDoubleJeopardy() {
       <span class="dj-sr-score">$${s.toLocaleString()}</span>
     </div>`).join('');
 
+  playSound('double-jeopardy');
   hostLookup('double_jeopardy');
   document.getElementById('dj-transition').classList.remove('hidden');
   await sleep(3800);
@@ -1156,6 +1189,7 @@ async function startFinalJeopardy() {
   fjWagers  = new Array(PLAYERS.length).fill(0);
   fjAnswers = new Array(PLAYERS.length).fill('');
 
+  playSound('final-jeopardy');
   hostLookup('final_jeopardy');
   document.getElementById('fj-screen').classList.remove('hidden');
   showFJPhase('reveal');
@@ -1551,6 +1585,7 @@ function showBreakdown() {
     </div>`;
 
   document.getElementById('play-again-btn').addEventListener('click', () => location.reload());
+  playSound('game-over');
   el.classList.remove('hidden');
 }
 

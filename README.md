@@ -181,6 +181,51 @@ After Final Jeopardy, a breakdown screen shows:
 - Longest answer streak
 - Highlights: stumped clues, category dominance, biggest Daily Double swing
 
+## Sound Effects
+
+Game sounds are pre-generated offline using `sounds.js` and served as static files. The game loads whatever is present at startup and falls back to silence for anything missing — all sounds are optional.
+
+**Generate sounds:**
+
+```bash
+# SFX from a text prompt (ElevenLabs sound-generation)
+node sounds.js sfx "triumphant game show ding, correct answer, brass hit" --name correct --duration 2
+node sounds.js sfx "harsh buzzer, wrong answer, classic 1970s TV" --name wrong --duration 2
+node sounds.js sfx "exciting daily double fanfare, game show stinger" --name daily-double --duration 3
+
+# Spoken lines using your host voice (ElevenLabs TTS)
+node sounds.js tts "Daily Double!" --name daily-double
+node sounds.js tts "Double Jeopardy!" --name double-jeopardy
+node sounds.js tts "Final Jeopardy!" --name final-jeopardy
+
+# Generate multiple takes to compare
+node sounds.js sfx "wrong answer buzzer" --name wrong --variants 3
+```
+
+**Review and adopt:**
+
+```bash
+node sounds.js list           # show all candidates and active sounds
+node sounds.js preview wrong-2  # play a candidate (opens system audio player)
+node sounds.js use wrong-2      # promote to active — copies to public/sounds/wrong.mp3
+node sounds.js clear wrong      # remove active sound, game goes silent for that event
+```
+
+**Supported events:**
+
+| Event | Fires when |
+|---|---|
+| `correct` | Any player answers correctly |
+| `wrong` | Any player answers incorrectly |
+| `buzz` | Human player buzzes in |
+| `timeout` | Buzz window expires with no answer |
+| `daily-double` | Daily Double tile is revealed |
+| `double-jeopardy` | Double Jeopardy transition starts |
+| `final-jeopardy` | Final Jeopardy screen opens |
+| `game-over` | Post-game breakdown is shown |
+
+Candidates are saved to `public/sounds/candidates/`. Active sounds live at `public/sounds/{event}.mp3`. A `sounds-manifest.json` in the project root tracks what prompt generated each file.
+
 ## Host Voice
 
 Chuck Pendleton's category announcements are spoken aloud using ElevenLabs TTS. When the board loads, all six category names are pre-generated in the background so audio is ready the instant a tile is clicked — no latency added to gameplay. If ElevenLabs is unavailable or the quota is exhausted the game continues silently.
