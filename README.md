@@ -19,6 +19,11 @@ A Jeopardy game where you compete against AI contestants. Categories and clues a
    ```
    node server.js
    ```
+   To enable the Sound Manager UI, start with `--dev`:
+   ```
+   node server.js --dev
+   ```
+   Without `--dev`, `/sounds-manager.html` returns 404 and the sound write/generate/delete APIs are blocked. Use `--dev` locally only — never in a public deployment.
 
 4. Open `http://localhost:3000` in Chrome (Web Speech API required).
 

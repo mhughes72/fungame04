@@ -17,6 +17,15 @@ if (!process.env.OPENAI_API_KEY) {
 
 const client = wrapOpenAI(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
 
+// Parse --dev flag — enables sound manager UI and write APIs
+const DEV_MODE = process.argv.includes('--dev') || process.env.DEV === '1';
+if (DEV_MODE) console.log('Dev mode: sound manager enabled');
+
+// Block sounds-manager.html in production before static middleware handles it
+if (!DEV_MODE) {
+  app.get('/sounds-manager.html', (req, res) => res.status(404).send('Not found'));
+}
+
 // Parse --players "Name1,Name2" from CLI args, or fall back to PLAYERS env var
 const playersFlagIdx = process.argv.indexOf('--players');
 const selectedNames  = playersFlagIdx !== -1
@@ -440,7 +449,10 @@ app.get('/api/sounds/manifest', (req, res) => {
   catch { res.json({ candidates: {}, active: {} }); }
 });
 
-app.put('/api/sounds/manifest', (req, res) => {
+const devOnly = (req, res, next) =>
+  DEV_MODE ? next() : res.status(403).json({ error: 'Sound manager not available in production. Start server with --dev.' });
+
+app.put('/api/sounds/manifest', devOnly, (req, res) => {
   try {
     fs.mkdirSync(path.dirname(SOUNDS_MANIFEST), { recursive: true });
     fs.writeFileSync(SOUNDS_MANIFEST, JSON.stringify(req.body, null, 2));
@@ -448,14 +460,14 @@ app.put('/api/sounds/manifest', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/sounds/candidates/:key', (req, res) => {
+app.delete('/api/sounds/candidates/:key', devOnly, (req, res) => {
   const key = req.params.key.replace(/[^a-z0-9\-]/gi, '');
   const p   = path.join(CANDIDATES_DIR, `${key}.mp3`);
   try { if (fs.existsSync(p)) fs.unlinkSync(p); res.json({ ok: true }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/sounds/generate', async (req, res) => {
+app.post('/api/sounds/generate', devOnly, async (req, res) => {
   const { type, prompt, text, duration = 3, voice = HOST_VOICE_ID } = req.body;
   if (!type) return res.status(400).json({ error: 'Missing type' });
   if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'No ElevenLabs key' });
