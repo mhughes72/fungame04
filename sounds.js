@@ -12,7 +12,7 @@ const HOST_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'lQgMO4VKveoqHDCZMAr1';
 
 const KNOWN_EVENTS = [
   'correct', 'correct-voice', 'wrong', 'wrong-voice', 'buzz', 'daily-double',
-  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over',
+  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over', 'loading',
 ];
 
 // ── Manifest ──────────────────────────────────────────────────────────────────
@@ -193,39 +193,57 @@ function cmdRemove(args) {
   console.log(`Removed "${key}" from "${event}" pool.`);
 }
 
+function cmdRegister(args) {
+  const keys = args.positional;
+  if (!keys.length) { console.error('Usage: node sounds.js register <key> [key2 key3 ...]'); process.exit(1); }
+
+  ensureDirs();
+  const manifest = loadManifest();
+  for (const key of keys) {
+    const p = candidatePath(key);
+    if (!fs.existsSync(p)) { console.error(`  ${key} — file not found at candidates/${key}.mp3, skipping`); continue; }
+    if (manifest.candidates[key]) { console.log(`  ${key} — already in manifest, skipping`); continue; }
+    manifest.candidates[key] = { type: 'imported', created: new Date().toISOString() };
+    console.log(`  ${key} — registered`);
+  }
+  saveManifest(manifest);
+}
+
 function cmdClear(args) {
-  const target = args.positional[0];
-  if (!target) { console.error('Usage: node sounds.js clear <event|candidate-key>'); process.exit(1); }
+  const targets = args.positional;
+  if (!targets.length) { console.error('Usage: node sounds.js clear <event|candidate-key> [key2 key3 ...]'); process.exit(1); }
   const manifest = loadManifest();
 
-  // Candidate key — delete file and remove from all pools
-  if (manifest.candidates[target]) {
-    const p = candidatePath(target);
-    if (fs.existsSync(p)) fs.unlinkSync(p);
-    delete manifest.candidates[target];
-    for (const [event, pool] of Object.entries(manifest.active)) {
-      const filtered = pool.filter(k => k !== target);
-      if (filtered.length !== pool.length) {
-        if (filtered.length === 0) delete manifest.active[event];
-        else manifest.active[event] = filtered;
-        console.log(`Removed from "${event}" pool.`);
+  for (const target of targets) {
+    // Candidate key — delete file and remove from all pools
+    if (manifest.candidates[target]) {
+      const p = candidatePath(target);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+      delete manifest.candidates[target];
+      for (const [event, pool] of Object.entries(manifest.active)) {
+        const filtered = pool.filter(k => k !== target);
+        if (filtered.length !== pool.length) {
+          if (filtered.length === 0) delete manifest.active[event];
+          else manifest.active[event] = filtered;
+          console.log(`  Removed "${target}" from "${event}" pool.`);
+        }
       }
+      console.log(`  Deleted candidate "${target}".`);
+      continue;
     }
-    saveManifest(manifest);
-    console.log(`Deleted candidate "${target}".`);
-    return;
+
+    // Event name — clear the entire pool (keep candidate files)
+    else if (KNOWN_EVENTS.includes(target)) {
+      delete manifest.active[target];
+      console.log(`  Cleared active pool for "${target}".`);
+    }
+
+    else {
+      console.error(`  "${target}" is not a known candidate or event — skipping.`);
+    }
   }
 
-  // Event name — clear the entire pool (keep candidate files)
-  if (KNOWN_EVENTS.includes(target)) {
-    delete manifest.active[target];
-    saveManifest(manifest);
-    console.log(`Cleared active pool for "${target}".`);
-    return;
-  }
-
-  console.error(`"${target}" is not a known candidate or event. Run "node sounds.js list".`);
-  process.exit(1);
+  saveManifest(manifest);
 }
 
 function cmdList() {
@@ -285,6 +303,9 @@ COMMANDS
   preview <candidate-key>
        Play a candidate file
 
+  register <key> [key2 key3 ...]
+       Import existing files from candidates/ into the manifest without regenerating
+
   use  <candidate-key>
        Set a candidate as the sole active sound for its event (pool of 1)
 
@@ -332,6 +353,7 @@ EXAMPLES
     case 'preview': cmdPreview(args);    break;
     case 'use':     cmdUse(args);        break;
     case 'add':     cmdAdd(args);        break;
+    case 'register': cmdRegister(args);  break;
     case 'remove':  cmdRemove(args);     break;
     case 'clear':   cmdClear(args);      break;
     case 'list':    cmdList();           break;

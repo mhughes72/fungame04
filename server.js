@@ -431,5 +431,78 @@ app.get('/api/tts', async (req, res) => {
 });
 
 
+// ── Sound manager API ─────────────────────────────────────────────────────────
+const CANDIDATES_DIR = path.join(__dirname, 'public', 'sounds', 'candidates');
+const SOUNDS_MANIFEST = path.join(__dirname, 'public', 'sounds', 'manifest.json');
+
+app.get('/api/sounds/manifest', (req, res) => {
+  try { res.json(JSON.parse(fs.readFileSync(SOUNDS_MANIFEST, 'utf8'))); }
+  catch { res.json({ candidates: {}, active: {} }); }
+});
+
+app.put('/api/sounds/manifest', (req, res) => {
+  try {
+    fs.mkdirSync(path.dirname(SOUNDS_MANIFEST), { recursive: true });
+    fs.writeFileSync(SOUNDS_MANIFEST, JSON.stringify(req.body, null, 2));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/sounds/candidates/:key', (req, res) => {
+  const key = req.params.key.replace(/[^a-z0-9\-]/gi, '');
+  const p   = path.join(CANDIDATES_DIR, `${key}.mp3`);
+  try { if (fs.existsSync(p)) fs.unlinkSync(p); res.json({ ok: true }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/sounds/generate', async (req, res) => {
+  const { type, prompt, text, duration = 3, voice = HOST_VOICE_ID } = req.body;
+  if (!type) return res.status(400).json({ error: 'Missing type' });
+  if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'No ElevenLabs key' });
+
+  let manifest = { candidates: {}, active: {} };
+  try { manifest = JSON.parse(fs.readFileSync(SOUNDS_MANIFEST, 'utf8')); } catch {}
+
+  const base = type === 'sfx' ? 'sfx' : 'tts';
+  let n = 1;
+  while (manifest.candidates[`${base}-${n}`]) n++;
+  const key = `${base}-${n}`;
+
+  try {
+    let audioBuf;
+    if (type === 'sfx') {
+      const r = await fetch('https://api.elevenlabs.io/v1/sound-generation', {
+        method: 'POST',
+        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: prompt, duration_seconds: duration, prompt_influence: 0.4 }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      audioBuf = Buffer.from(await r.arrayBuffer());
+    } else {
+      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {
+        method: 'POST',
+        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, model_id: 'eleven_turbo_v2_5', voice_settings: { stability: 0.55, similarity_boost: 0.75 } }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      audioBuf = Buffer.from(await r.arrayBuffer());
+    }
+
+    fs.mkdirSync(CANDIDATES_DIR, { recursive: true });
+    fs.writeFileSync(path.join(CANDIDATES_DIR, `${key}.mp3`), audioBuf);
+
+    manifest.candidates[key] = type === 'sfx'
+      ? { type: 'sfx', prompt, duration, created: new Date().toISOString() }
+      : { type: 'tts', text, voice, created: new Date().toISOString() };
+    fs.mkdirSync(path.dirname(SOUNDS_MANIFEST), { recursive: true });
+    fs.writeFileSync(SOUNDS_MANIFEST, JSON.stringify(manifest, null, 2));
+
+    res.json({ key });
+  } catch (err) {
+    console.error('Generate error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AI Jeopardy running at http://localhost:${PORT}`));

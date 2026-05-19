@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sound Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0a0a1a;
+      --panel:   #0f0f2a;
+      --card:    #181830;
+      --border:  #2a2a50;
+      --gold:    #d4a017;
+      --gold-lt: #f0c040;
+      --text:    #ccd;
+      --muted:   #667;
+      --green:   #3d9;
+      --red:     #e44;
+      --blue-lt: #6af;
+      --purple:  #b8f;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: #050518;
+      border-bottom: 2px solid var(--gold);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 1rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    #save-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-left: auto;
+      transition: color 0.3s;
+    }
+    #save-status.saving { color: var(--gold-lt); }
+    #save-status.saved  { color: var(--green); }
+    #save-status.error  { color: var(--red); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    #left-panel {
+      border-right: 2px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Generate section ── */
+    #gen-section {
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #gen-toggle {
+      width: 100%;
+      background: #0c0c22;
+      border: none;
+      color: var(--gold-lt);
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 10px 16px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    #gen-toggle:hover { background: #10103a; }
+    #gen-arrow { transition: transform 0.2s; }
+    #gen-arrow.open { transform: rotate(90deg); }
+
+    #gen-form {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #0c0c22;
+    }
+    #gen-form.hidden { display: none; }
+    .hidden { display: none; }
+
+    .tab-row {
+      display: flex;
+      gap: 6px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: #181830;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active { background: #1a1a50; border-color: var(--gold); color: var(--gold-lt); }
+
+    .form-row { display: flex; flex-direction: column; gap: 4px; }
+    .form-label {
+      font-size: 0.68rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .form-input, .form-textarea {
+      background: #181830;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: Arial, sans-serif;
+      font-size: 0.82rem;
+      padding: 7px 10px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus, .form-textarea:focus { border-color: #556; }
+    .form-textarea { resize: vertical; min-height: 56px; }
+
+    .form-row-inline { display: flex; gap: 10px; align-items: flex-end; }
+    .form-row-inline .form-row { flex: 1; }
+
+    #gen-name-row { display: flex; gap: 6px; align-items: flex-end; }
+    #gen-name-row .form-row { flex: 1; }
+
+    #gen-btn {
+      background: #1a1a50;
+      border: 1px solid var(--gold);
+      color: var(--gold-lt);
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    #gen-btn:hover:not(:disabled) { background: #252560; }
+    #gen-btn:disabled { opacity: 0.45; cursor: default; }
+
+    /* ── Pending items ── */
+    #pending-section {
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    #pending-section:empty { display: none; }
+    .pending-header {
+      padding: 7px 16px;
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green);
+      background: #0a1a0a;
+      position: sticky;
+      top: 0;
+    }
+
+    .pending-card {
+      background: #0d1a0d;
+      border-bottom: 1px solid #1a2a1a;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pending-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pending-key {
+      font-weight: bold;
+      font-size: 0.82rem;
+      color: var(--green);
+      flex: 1;
+    }
+    .pending-detail {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .pending-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .pend-btn {
+      background: #181830;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pend-btn:hover { color: #fff; border-color: #778; }
+    .pend-btn.play { border-color: #224; }
+    .pend-btn.play:hover, .pend-btn.play.playing { color: var(--green); border-color: var(--green); }
+    .pend-btn.discard:hover { color: var(--red); border-color: var(--red); }
+    .pend-btn.keep:hover { color: var(--green); border-color: var(--green); }
+
+    .pend-apply {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      margin-left: auto;
+    }
+    .pend-select {
+      background: #181830;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.72rem;
+      padding: 4px 6px;
+      border-radius: 4px;
+      outline: none;
+    }
+    .pend-add-btn {
+      background: #1a2a1a;
+      border: 1px solid #3a5a3a;
+      color: #6c6;
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pend-add-btn:hover { background: #223322; border-color: var(--green); color: var(--green); }
+
+    /* ── Candidates list ── */
+    .panel-header {
+      padding: 10px 16px;
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #candidates-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .candidate-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .candidate-card:hover { border-color: #445; background: #1c1c38; }
+    .candidate-card.dragging { opacity: 0.4; }
+    .candidate-card.in-pool { opacity: 0.5; }
+
+    .card-info { flex: 1; min-width: 0; }
+    .card-key {
+      font-weight: bold;
+      font-size: 0.8rem;
+      color: #dde;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-detail {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-type {
+      font-size: 0.6rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 2px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .type-sfx      { background: #1a3a5a; color: var(--blue-lt); }
+    .type-tts      { background: #2a1a4a; color: var(--purple); }
+    .type-imported { background: #2a2a1a; color: #aa8; }
+
+    .level-row {
+      display: flex; align-items: center; gap: 5px; margin-top: 4px;
+    }
+    .level-bar-wrap {
+      flex: 1; height: 4px; background: #1a1a30; border-radius: 2px;
+      position: relative; overflow: visible;
+    }
+    .level-bar {
+      height: 100%; border-radius: 2px; width: 0%;
+      transition: width 0.4s ease, background-color 0.4s ease;
+    }
+    .level-peak {
+      position: absolute; top: -2px; width: 2px; height: 8px;
+      background: #fff; border-radius: 1px; opacity: 0.7;
+      transition: left 0.4s ease;
+    }
+    .level-label {
+      font-size: 0.58rem; color: var(--muted); min-width: 34px;
+      text-align: right; font-variant-numeric: tabular-nums;
+    }
+    .level-label.level-pending { color: #334; font-style: italic; }
+
+    .card-actions { display: flex; gap: 3px; flex-shrink: 0; }
+    .icon-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .icon-btn:hover { color: #fff; border-color: #778; }
+    .icon-btn.playing { color: var(--green); border-color: var(--green); }
+    .icon-btn.del:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── Events panel ── */
+    #events-panel {
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .event-slot {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 13px;
+      transition: border-color 0.15s;
+    }
+    .event-slot.drag-over { border-color: var(--gold); background: #141428; }
+
+    .slot-header { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+    .slot-name {
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold-lt);
+    }
+    .slot-desc { font-size: 0.68rem; color: var(--muted); flex: 1; }
+    .slot-vol {
+      display: flex; align-items: center; gap: 5px; margin-left: auto;
+      font-size: 0.65rem; color: var(--muted); white-space: nowrap;
+    }
+    .slot-vol input[type=range] {
+      width: 72px; height: 3px; accent-color: var(--gold);
+      cursor: pointer; vertical-align: middle;
+    }
+    .slot-vol-val { min-width: 26px; text-align: right; color: var(--gold-lt); }
+
+    .slot-pool { display: flex; flex-wrap: wrap; gap: 5px; min-height: 30px; align-items: center; }
+    .slot-empty { font-size: 0.7rem; color: #334; font-style: italic; }
+
+    .pool-chip {
+      background: #1a1a38;
+      border: 1px solid #334;
+      border-radius: 4px;
+      padding: 3px 7px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.72rem;
+      color: #aab;
+    }
+    .chip-play {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 0.68rem; padding: 0; line-height: 1;
+    }
+    .chip-play:hover, .chip-play.playing { color: var(--green); }
+    .chip-remove {
+      background: none; border: none; color: #445;
+      cursor: pointer; font-size: 0.75rem; padding: 0; line-height: 1;
+    }
+    .chip-remove:hover { color: var(--red); }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a50; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Sound Manager</h1>
+  <a href="/" style="font-size:0.75rem;color:var(--muted);text-decoration:none;margin-left:12px;">← Game</a>
+  <span id="save-status"></span>
+</header>
+
+<div class="layout">
+
+  <!-- ── Left panel ── -->
+  <div id="left-panel">
+
+    <!-- Generate section -->
+    <div id="gen-section">
+      <button id="gen-toggle">
+        <span id="gen-arrow">▶</span> Generate New Sound
+      </button>
+      <div id="gen-form" class="hidden">
+        <div class="tab-row">
+          <button class="tab-btn active" data-tab="sfx">SFX</button>
+          <button class="tab-btn" data-tab="tts">Voice (TTS)</button>
+        </div>
+
+        <div id="sfx-fields">
+          <div class="form-row">
+            <label class="form-label">Prompt</label>
+            <textarea id="sfx-prompt" class="form-textarea" placeholder="e.g. triumphant game show ding, correct answer, brass hit"></textarea>
+          </div>
+          <div class="form-row-inline">
+            <div class="form-row">
+              <label class="form-label">Duration (sec)</label>
+              <input id="sfx-duration" class="form-input" type="number" value="2" min="1" max="10" step="0.5">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Variants</label>
+              <input id="sfx-variants" class="form-input" type="number" value="1" min="1" max="5">
+            </div>
+          </div>
+        </div>
+
+        <div id="tts-fields" class="hidden">
+          <div class="form-row">
+            <label class="form-label">Text</label>
+            <input id="tts-text" class="form-input" type="text" placeholder='e.g. "That is correct!"'>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Voice ID <span style="color:var(--muted);font-weight:normal;font-size:0.7rem">(ElevenLabs)</span></label>
+            <input id="tts-voice" class="form-input" type="text" value="lQgMO4VKveoqHDCZMAr1" placeholder="ElevenLabs voice ID">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Variants</label>
+            <input id="tts-variants" class="form-input" type="number" value="1" min="1" max="5">
+          </div>
+        </div>
+
+        <div id="gen-name-row">
+          <button id="gen-btn">Generate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending (just generated) -->
+    <div id="pending-section"></div>
+
+    <!-- All candidates -->
+    <div class="panel-header">Candidates — drag to assign</div>
+    <div id="candidates-list"></div>
+
+  </div>
+
+  <!-- ── Events panel ── -->
+  <div id="events-panel"></div>
+
+</div>
+
+<script>
+const EVENTS = [
+  { key: 'correct',         desc: 'Any player answers correctly' },
+  { key: 'correct-voice',   desc: 'Spoken reaction — plays alongside correct' },
+  { key: 'wrong',           desc: 'Any player answers incorrectly' },
+  { key: 'wrong-voice',     desc: 'Spoken reaction — plays alongside wrong' },
+  { key: 'buzz',            desc: 'Human player buzzes in' },
+  { key: 'timeout',         desc: 'Buzz window expires with no answer' },
+  { key: 'daily-double',    desc: 'Daily Double tile revealed' },
+  { key: 'double-jeopardy', desc: 'Double Jeopardy transition' },
+  { key: 'final-jeopardy',  desc: 'Final Jeopardy screen opens' },
+  { key: 'game-over',       desc: 'Post-game breakdown shown' },
+  { key: 'loading',         desc: 'Board is generating (round 1 and round 2)' },
+];
+const EVENT_KEYS = EVENTS.map(e => e.key);
+
+let manifest  = { candidates: {}, active: {} };
+let saveTimer = null;
+let currentAudio = null;
+let currentBtn   = null;
+let activeTab    = 'sfx';
+let pendingKeys  = []; // keys generated this session, not yet dismissed
+
+// ── Loudness analysis ─────────────────────────────────────────────────────────
+
+const loudnessCache = {}; // key → { rms, peak } | null
+let sharedAudioCtx  = null;
+
+function getAudioCtx() {
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed')
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return sharedAudioCtx;
+}
+
+async function analyzeLoudness(key) {
+  if (key in loudnessCache) return loudnessCache[key];
+  loudnessCache[key] = null;
+  try {
+    const res = await fetch(`/sounds/candidates/${key}.mp3`);
+    if (!res.ok) return null;
+    const decoded = await getAudioCtx().decodeAudioData(await res.arrayBuffer());
+    let sumSq = 0, count = 0, peak = 0;
+    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+      const data = decoded.getChannelData(ch);
+      for (let i = 0; i < data.length; i++) {
+        const s = Math.abs(data[i]);
+        if (s > peak) peak = s;
+        sumSq += s * s;
+        count++;
+      }
+    }
+    loudnessCache[key] = { rms: Math.sqrt(sumSq / count), peak };
+  } catch { loudnessCache[key] = null; }
+  return loudnessCache[key];
+}
+
+function applyLevelMeter(card, key) {
+  analyzeLoudness(key).then(result => {
+    const label = card.querySelector('.level-label');
+    const bar   = card.querySelector('.level-bar');
+    const tick  = card.querySelector('.level-peak');
+    if (!label) return;
+    if (!result) { label.textContent = '—'; label.classList.remove('level-pending'); return; }
+
+    const { rms, peak } = result;
+    // Convert to dBFS, clamp to -40..0
+    const rmsDb  = Math.max(-40, 20 * Math.log10(Math.max(rms,  1e-6)));
+    const peakDb = Math.max(-40, 20 * Math.log10(Math.max(peak, 1e-6)));
+    const rmsPct  = ((rmsDb  + 40) / 40) * 100;
+    const peakPct = ((peakDb + 40) / 40) * 100;
+
+    const color = rmsPct < 40 ? '#4a9' : rmsPct < 70 ? '#ca6' : '#e55';
+    bar.style.width           = rmsPct + '%';
+    bar.style.backgroundColor = color;
+    tick.style.display        = 'block';
+    tick.style.left           = peakPct + '%';
+    label.textContent         = rmsDb.toFixed(0) + ' dB';
+    label.classList.remove('level-pending');
+    label.style.color         = color;
+  });
+}
+
+const saveStatus     = document.getElementById('save-status');
+const candidatesList = document.getElementById('candidates-list');
+const eventsPanel    = document.getElementById('events-panel');
+const pendingSection = document.getElementById('pending-section');
+
+// ── Manifest API ──────────────────────────────────────────────────────────────
+
+async function loadManifest() {
+  const res = await fetch('/api/sounds/manifest');
+  manifest  = await res.json();
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  setStatus('saving', 'Saving…');
+  saveTimer = setTimeout(doSave, 600);
+}
+
+async function doSave() {
+  try {
+    await fetch('/api/sounds/manifest', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(manifest),
+    });
+    setStatus('saved', 'Saved');
+    setTimeout(() => setStatus('', ''), 2000);
+  } catch { setStatus('error', 'Save failed'); }
+}
+
+function setStatus(cls, txt) {
+  saveStatus.className = cls;
+  saveStatus.textContent = txt;
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+
+function playCandidate(key, btn, volume = 1.0) {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+    if (currentBtn) { currentBtn.textContent = '▶'; currentBtn.classList.remove('playing'); }
+    if (currentBtn === btn) { currentBtn = null; return; }
+  }
+  const audio = new Audio(`/sounds/candidates/${key}.mp3`);
+  audio.volume = volume;
+  audio.play().catch(() => {});
+  audio.onended = () => {
+    btn.textContent = '▶'; btn.classList.remove('playing');
+    currentAudio = null; currentBtn = null;
+  };
+  currentAudio = audio; currentBtn = btn;
+  btn.textContent = '■'; btn.classList.add('playing');
+}
+
+// ── Pool helpers ──────────────────────────────────────────────────────────────
+
+function addToPool(event, key) {
+  const pool = manifest.active[event] ?? [];
+  if (pool.includes(key)) return;
+  manifest.active[event] = [...pool, key];
+  scheduleSave();
+  render();
+}
+
+function removeFromPool(event, key) {
+  const pool = (manifest.active[event] ?? []).filter(k => k !== key);
+  if (pool.length === 0) delete manifest.active[event];
+  else manifest.active[event] = pool;
+  scheduleSave();
+  render();
+}
+
+function inAnyPool(key) {
+  return Object.values(manifest.active).some(pool => pool.includes(key));
+}
+
+async function deleteCandidate(key) {
+  if (!confirm(`Delete "${key}" permanently?`)) return;
+  delete manifest.candidates[key];
+  for (const [event, pool] of Object.entries(manifest.active)) {
+    const f = pool.filter(k => k !== key);
+    if (f.length !== pool.length) {
+      if (f.length === 0) delete manifest.active[event];
+      else manifest.active[event] = f;
+    }
+  }
+  pendingKeys = pendingKeys.filter(k => k !== key);
+  await fetch(`/api/sounds/candidates/${key}`, { method: 'DELETE' });
+  scheduleSave();
+  render();
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+
+async function generate() {
+  const variants = parseInt(activeTab === 'sfx'
+    ? document.getElementById('sfx-variants').value
+    : document.getElementById('tts-variants').value, 10) || 1;
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+
+  for (let i = 0; i < variants; i++) {
+    try {
+      const body = activeTab === 'sfx'
+        ? { type: 'sfx',
+            prompt:   document.getElementById('sfx-prompt').value.trim(),
+            duration: parseFloat(document.getElementById('sfx-duration').value) || 3 }
+        : { type: 'tts',
+            text:  document.getElementById('tts-text').value.trim(),
+            voice: document.getElementById('tts-voice').value.trim() || undefined };
+
+      const res  = await fetch('/api/sounds/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Reload manifest so new candidate is visible
+      await loadManifest();
+      pendingKeys.unshift(data.key);
+      render();
+    } catch (err) {
+      alert(`Generation failed: ${err.message}`);
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Generate';
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function render() {
+  renderPending();
+  renderCandidates();
+  renderEvents();
+}
+
+function renderPending() {
+  const active = pendingKeys.filter(k => manifest.candidates[k]);
+  if (!active.length) { pendingSection.innerHTML = ''; return; }
+
+  pendingSection.innerHTML = `<div class="pending-header">Just Generated</div>`;
+
+  for (const key of active) {
+    const c      = manifest.candidates[key] ?? {};
+    const detail = c.type === 'sfx' ? c.prompt : c.text ?? '';
+
+    const card = document.createElement('div');
+    card.className = 'pending-card';
+    card.innerHTML = `
+      <div class="pending-top">
+        <span class="pending-key">${key}</span>
+        <span class="pending-detail">${detail}</span>
+      </div>
+      <div class="pending-actions">
+        <button class="pend-btn play">▶ Play</button>
+        <button class="pend-btn keep">Keep</button>
+        <button class="pend-btn discard">Discard</button>
+        <div class="pend-apply">
+          <select class="pend-select">
+            <option value="">Add to event…</option>
+            ${EVENT_KEYS.map(e => `<option value="${e}">${e}</option>`).join('')}
+          </select>
+          <button class="pend-add-btn">+ Add</button>
+        </div>
+      </div>`;
+
+    const playBtn = card.querySelector('.play');
+    playBtn.addEventListener('click', () => playCandidate(key, playBtn));
+
+    card.querySelector('.keep').addEventListener('click', () => {
+      pendingKeys = pendingKeys.filter(k => k !== key);
+      render();
+    });
+
+    card.querySelector('.discard').addEventListener('click', () => deleteCandidate(key));
+
+    card.querySelector('.pend-add-btn').addEventListener('click', () => {
+      const event = card.querySelector('.pend-select').value;
+      if (!event) return;
+      addToPool(event, key);
+      pendingKeys = pendingKeys.filter(k => k !== key);
+      render();
+    });
+
+    pendingSection.appendChild(card);
+  }
+}
+
+function renderCandidates() {
+  const pendingSet = new Set(pendingKeys);
+  const keys = Object.keys(manifest.candidates).filter(k => !pendingSet.has(k));
+
+  if (!keys.length) {
+    candidatesList.innerHTML = '<div style="color:#334;padding:14px;font-size:0.8rem">No candidates yet.</div>';
+    return;
+  }
+
+  candidatesList.innerHTML = '';
+  for (const key of keys) {
+    const c    = manifest.candidates[key];
+    const used = inAnyPool(key);
+    const typeLabel = c.type === 'sfx' ? 'SFX' : c.type === 'tts' ? 'TTS' : 'IMP';
+    const detail    = c.type === 'sfx' ? (c.prompt ?? '') : c.type === 'tts' ? (c.text ?? '') : 'imported';
+
+    const card = document.createElement('div');
+    card.className = 'candidate-card' + (used ? ' in-pool' : '');
+    card.draggable = true;
+    card.innerHTML = `
+      <span class="card-type type-${c.type ?? 'imported'}">${typeLabel}</span>
+      <div class="card-info">
+        <div class="card-key">${key}</div>
+        <div class="card-detail">${detail}</div>
+        <div class="level-row">
+          <div class="level-bar-wrap">
+            <div class="level-bar"></div>
+            <div class="level-peak" style="display:none"></div>
+          </div>
+          <span class="level-label level-pending">…</span>
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="icon-btn play-btn" title="Preview">▶</button>
+        <button class="icon-btn del" title="Delete">🗑</button>
+      </div>`;
+
+    const playBtn = card.querySelector('.play-btn');
+    playBtn.addEventListener('click', e => { e.stopPropagation(); playCandidate(key, playBtn); });
+    card.querySelector('.del').addEventListener('click', e => { e.stopPropagation(); deleteCandidate(key); });
+    card.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', key);
+      e.dataTransfer.effectAllowed = 'copy';
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+    candidatesList.appendChild(card);
+    applyLevelMeter(card, key);
+  }
+}
+
+function renderEvents() {
+  eventsPanel.innerHTML = '';
+  for (const { key: event, desc } of EVENTS) {
+    const pool = manifest.active[event] ?? [];
+    const slot = document.createElement('div');
+    slot.className = 'event-slot';
+    const vol = manifest.volumes?.[event] ?? 1.0;
+    slot.innerHTML = `
+      <div class="slot-header">
+        <span class="slot-name">${event}</span>
+        <span class="slot-desc">${desc}</span>
+        <label class="slot-vol">
+          vol
+          <input type="range" min="0" max="1" step="0.05" value="${vol}" data-event="${event}">
+          <span class="slot-vol-val">${Math.round(vol * 100)}%</span>
+        </label>
+      </div>
+      <div class="slot-pool">
+        ${pool.length
+          ? pool.map(key => {
+              const c      = manifest.candidates[key] ?? {};
+              const detail = c.type === 'tts' ? c.text : c.type === 'sfx' ? c.prompt : 'imported';
+              return `<div class="pool-chip" data-key="${key}" data-event="${event}">
+                <button class="chip-play" title="Preview">▶</button>
+                <span title="${detail ?? ''}">${key}</span>
+                <button class="chip-remove" title="Remove">✕</button>
+              </div>`;
+            }).join('')
+          : '<span class="slot-empty">Drop a candidate here</span>'}
+      </div>`;
+
+    slot.querySelectorAll('.pool-chip').forEach(chip => {
+      const key = chip.dataset.key, evt = chip.dataset.event;
+      const pb  = chip.querySelector('.chip-play');
+      pb.addEventListener('click', () => playCandidate(key, pb, manifest.volumes?.[event] ?? 1.0));
+      chip.querySelector('.chip-remove').addEventListener('click', () => removeFromPool(evt, key));
+    });
+
+    const volInput = slot.querySelector('input[type=range]');
+    const volVal   = slot.querySelector('.slot-vol-val');
+    volInput.addEventListener('input', () => {
+      const v = parseFloat(volInput.value);
+      volVal.textContent = Math.round(v * 100) + '%';
+      if (!manifest.volumes) manifest.volumes = {};
+      manifest.volumes[event] = v;
+      scheduleSave();
+    });
+
+    slot.addEventListener('dragover',  e => { e.preventDefault(); slot.classList.add('drag-over'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('drag-over');
+      const key = e.dataTransfer.getData('text/plain');
+      if (key) addToPool(event, key);
+    });
+
+    eventsPanel.appendChild(slot);
+  }
+}
+
+// ── Generate form wiring ──────────────────────────────────────────────────────
+
+document.getElementById('gen-toggle').addEventListener('click', () => {
+  const form  = document.getElementById('gen-form');
+  const arrow = document.getElementById('gen-arrow');
+  const open  = form.classList.toggle('hidden');
+  arrow.classList.toggle('open', !open);
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.getElementById('sfx-fields').classList.toggle('hidden', activeTab !== 'sfx');
+    document.getElementById('tts-fields').classList.toggle('hidden', activeTab !== 'tts');
+  });
+});
+
+document.getElementById('gen-btn').addEventListener('click', generate);
+
+// Pre-fill event name when typing in prompt/text
+function suggestName(src, target) {
+  document.getElementById(src).addEventListener('input', () => {
+    const nameEl = document.getElementById(target);
+    if (!nameEl.value) nameEl.placeholder = 'e.g. correct-voice';
+  });
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+(async () => {
+  try {
+    await loadManifest();
+    render();
+  } catch {
+    setStatus('error', 'Failed to load');
+  }
+})();
+</script>
+</body>
+</html>

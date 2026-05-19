@@ -1,0 +1,190 @@
+{
+  "candidates": {
+    "correct-voice-1": {
+      "type": "tts",
+      "text": "Correct",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:13.463Z"
+    },
+    "correct-voice-2": {
+      "type": "tts",
+      "text": "Correct",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:13.643Z"
+    },
+    "correct-voice-3": {
+      "type": "tts",
+      "text": "Correct",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:13.822Z"
+    },
+    "correct-voice-4": {
+      "type": "tts",
+      "text": "you got it!",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:35.219Z"
+    },
+    "correct-voice-5": {
+      "type": "tts",
+      "text": "you got it!",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:35.417Z"
+    },
+    "correct-voice-6": {
+      "type": "tts",
+      "text": "you got it!",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:35.653Z"
+    },
+    "correct-voice-7": {
+      "type": "tts",
+      "text": "smart ass",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:48.615Z"
+    },
+    "correct-voice-8": {
+      "type": "tts",
+      "text": "smart ass",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:48.800Z"
+    },
+    "correct-voice-9": {
+      "type": "tts",
+      "text": "smart ass",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-18T23:46:49.005Z"
+    },
+    "correct-1": {
+      "type": "sfx",
+      "prompt": "a subtle ding or bing like in a 70s gameshow when someone gets the answer correct",
+      "duration": 2,
+      "created": "2026-05-19T00:12:41.665Z"
+    },
+    "correct-2": {
+      "type": "sfx",
+      "prompt": "a subtle ding or bing like in a 70s gameshow when someone gets the answer correct",
+      "duration": 2,
+      "created": "2026-05-19T00:12:43.155Z"
+    },
+    "correct-3": {
+      "type": "sfx",
+      "prompt": "a subtle ding or bing like in a 70s gameshow when someone gets the answer correct",
+      "duration": 2,
+      "created": "2026-05-19T00:12:44.697Z"
+    },
+    "wrong-1": {
+      "type": "sfx",
+      "prompt": "a buzzer indicating a wrong answer from a pre digital 70s game show",
+      "duration": 2,
+      "created": "2026-05-19T00:23:27.689Z"
+    },
+    "wrong-2": {
+      "type": "sfx",
+      "prompt": "a buzzer indicating a wrong answer from a pre digital 70s game show",
+      "duration": 2,
+      "created": "2026-05-19T00:23:29.372Z"
+    },
+    "wrong-3": {
+      "type": "sfx",
+      "prompt": "a buzzer indicating a wrong answer from a pre digital 70s game show",
+      "duration": 2,
+      "created": "2026-05-19T00:23:30.932Z"
+    },
+    "sfx-1": {
+      "type": "sfx",
+      "prompt": "a pre-digtal buzz sound indicating a wrong answer from a 70s game show",
+      "duration": 2,
+      "created": "2026-05-19T00:26:56.401Z"
+    },
+    "sfx-2": {
+      "type": "sfx",
+      "prompt": "a pre-digtal buzz sound indicating a wrong answer from a 70s game show",
+      "duration": 2,
+      "created": "2026-05-19T00:26:57.982Z"
+    },
+    "sfx-3": {
+      "type": "sfx",
+      "prompt": "a pre-digtal buzz sound indicating a wrong answer from a 70s game show",
+      "duration": 2,
+      "created": "2026-05-19T00:26:59.407Z"
+    },
+    "tts-1": {
+      "type": "tts",
+      "text": "incorrect",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-19T00:27:40.172Z"
+    },
+    "tts-2": {
+      "type": "tts",
+      "text": "incorrect",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-19T00:27:40.394Z"
+    },
+    "tts-3": {
+      "type": "tts",
+      "text": "incorrect",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-19T00:27:40.595Z"
+    },
+    "tts-4": {
+      "type": "tts",
+      "text": "you suck",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-19T00:28:31.574Z"
+    },
+    "tts-5": {
+      "type": "tts",
+      "text": "you suck",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-19T00:28:31.792Z"
+    },
+    "tts-6": {
+      "type": "tts",
+      "text": "you suck",
+      "voice": "lQgMO4VKveoqHDCZMAr1",
+      "created": "2026-05-19T00:28:31.988Z"
+    },
+    "sfx-4": {
+      "type": "sfx",
+      "prompt": "sound effect from a 70s game show that is ambient backround for when the audience is waiting for the next stage in the game",
+      "duration": 2,
+      "created": "2026-05-19T00:29:54.374Z"
+    },
+    "sfx-5": {
+      "type": "sfx",
+      "prompt": "sound effect from a 70s game show that is ambient backround for when the audience is waiting for the next stage in the game",
+      "duration": 2,
+      "created": "2026-05-19T00:29:55.911Z"
+    },
+    "sfx-6": {
+      "type": "sfx",
+      "prompt": "sound effect from a 70s game show that is ambient backround for when the audience is waiting for the next stage in the game",
+      "duration": 2,
+      "created": "2026-05-19T00:29:57.527Z"
+    }
+  },
+  "active": {
+    "correct-voice": [
+      "correct-voice-4",
+      "correct-voice-7",
+      "correct-voice-1"
+    ],
+    "correct": [
+      "correct-2"
+    ],
+    "wrong": [
+      "wrong-3"
+    ],
+    "wrong-voice": [
+      "tts-2",
+      "tts-4"
+    ],
+    "loading": [
+      "sfx-6"
+    ]
+  },
+  "volumes": {
+    "correct": 0.15,
+    "wrong": 0.25
+  }
+}

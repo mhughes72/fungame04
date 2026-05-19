@@ -183,7 +183,52 @@ After Final Jeopardy, a breakdown screen shows:
 
 ## Sound Effects
 
-Game sounds are pre-generated offline using `sounds.js`. Every event supports a **pool** — the game picks randomly from the pool each time the event fires. Pools of one always play the same sound. All sounds are optional; the game falls back to silence for any event with no active pool.
+Game sounds are generated using ElevenLabs and managed through either the **Sound Manager UI** or the **`sounds.js` CLI**. Every event supports a **pool** — the game picks randomly from the pool each time the event fires. Pools of one always play the same sound. All sounds are optional; the game falls back to silence for any event with no active pool.
+
+**Supported events:**
+
+| Event | Fires when |
+|---|---|
+| `correct` | Any player answers correctly |
+| `correct-voice` | Any player answers correctly (layered with `correct`) |
+| `wrong` | Any player answers incorrectly |
+| `wrong-voice` | Any player answers incorrectly (layered with `wrong`) |
+| `buzz` | Human player buzzes in |
+| `timeout` | Buzz window expires with no answer |
+| `daily-double` | Daily Double tile is revealed |
+| `double-jeopardy` | Double Jeopardy transition starts |
+| `final-jeopardy` | Final Jeopardy screen opens |
+| `game-over` | Post-game breakdown is shown |
+| `loading` | Board is generating (round 1 and round 2) |
+
+**Layering:** `correct` and `correct-voice` (and `wrong` / `wrong-voice`) play simultaneously — use one for an SFX sting and the other for a spoken host reaction.
+
+Candidates are saved to `public/sounds/candidates/`. The active pool configuration and per-event volumes live in `public/sounds/manifest.json`.
+
+## Sound Manager
+
+The easiest way to manage sounds is the browser-based Sound Manager at `http://localhost:3000/sounds-manager.html`.
+
+**Left panel — generate and browse:**
+
+1. Click **Generate New Sound** to expand the form.
+2. Choose **SFX** (ElevenLabs sound-generation from a text prompt) or **Voice (TTS)** (spoken line using ElevenLabs TTS).
+   - SFX fields: prompt, duration (seconds), number of variants to generate at once.
+   - Voice fields: text to speak, ElevenLabs voice ID (defaults to the host voice), number of variants.
+3. Hit **Generate** — each clip appears in the **Just Generated** section as it finishes.
+4. For each generated clip: **▶ Play** to audition it, **Keep** to move it to the candidates list, **Discard** to delete it, or use the **Add to event** dropdown to assign it directly to an event pool.
+5. The **Candidates** list below shows all saved clips. Each card shows the type badge, the prompt or text, and a **loudness meter** (RMS bar + peak tick + dB reading in green/amber/red). Drag any card to an event slot on the right to add it to that pool.
+
+**Right panel — event slots:**
+
+- Each event has a drop zone showing its current pool.
+- The **vol** slider on each event sets playback volume (0–100%). This is what the game uses and what you hear when previewing from the pool chips. Use it to balance SFX against voice, or quiet down a looping ambient clip.
+- Pool chips have a **▶** button to preview at the event's current volume, and **✕** to remove from the pool (the file stays in candidates).
+- Changes auto-save to `manifest.json` 600 ms after the last edit.
+
+## `sounds.js` CLI
+
+For scripted or bulk generation, use the CLI tool directly:
 
 **Generate candidates:**
 
@@ -203,13 +248,13 @@ node sounds.js tts "Final Jeopardy!" --name final-jeopardy
 **Preview and activate:**
 
 ```bash
-node sounds.js list                   # show all candidates and active pools
+node sounds.js list                     # show all candidates and active pools
 node sounds.js preview correct-voice-2  # play a candidate
 
-node sounds.js use correct-5          # set correct pool to just correct-5
-node sounds.js use correct-voice-1    # set correct-voice pool to just correct-voice-1
-node sounds.js add correct-voice-3    # add to pool — game now picks randomly between 1 and 3
-node sounds.js add correct-voice-5    # pool is now 3 deep
+node sounds.js use correct-5            # set correct pool to just correct-5
+node sounds.js use correct-voice-1      # set correct-voice pool to just correct-voice-1
+node sounds.js add correct-voice-3      # add to pool — game now picks randomly between 1 and 3
+node sounds.js add correct-voice-5      # pool is now 3 deep
 ```
 
 **Modify pools:**
@@ -220,30 +265,17 @@ node sounds.js clear correct-voice      # empty the pool entirely (keeps files)
 node sounds.js clear correct-voice-2    # delete a candidate file and remove from pool
 ```
 
-**Layering:** `correct` and `correct-voice` (and `wrong` / `wrong-voice`) play simultaneously — use one for an SFX sting and the other for a spoken host reaction.
+**Import existing files:**
 
-**Supported events:**
-
-| Event | Fires when |
-|---|---|
-| `correct` | Any player answers correctly |
-| `correct-voice` | Any player answers correctly (layered with `correct`) |
-| `wrong` | Any player answers incorrectly |
-| `wrong-voice` | Any player answers incorrectly (layered with `wrong`) |
-| `buzz` | Human player buzzes in |
-| `timeout` | Buzz window expires with no answer |
-| `daily-double` | Daily Double tile is revealed |
-| `double-jeopardy` | Double Jeopardy transition starts |
-| `final-jeopardy` | Final Jeopardy screen opens |
-| `game-over` | Post-game breakdown is shown |
-
-Candidates are saved to `public/sounds/candidates/`. The active pool configuration lives in `public/sounds/manifest.json`.
+```bash
+node sounds.js register correct-5 correct-6   # add files already in candidates/ to the manifest
+```
 
 ## Host Voice
 
 Chuck Pendleton's category announcements are spoken aloud using ElevenLabs TTS. When the board loads, all six category names are pre-generated in the background so audio is ready the instant a tile is clicked — no latency added to gameplay. If ElevenLabs is unavailable or the quota is exhausted the game continues silently.
 
-To use a custom voice, replace `HOST_VOICE_ID` in `server.js` with your ElevenLabs Voice ID (find it in your ElevenLabs dashboard under Voices).
+To use a custom voice, replace `HOST_VOICE_ID` in `server.js` with your ElevenLabs Voice ID (find it in your ElevenLabs dashboard under Voices). The same voice ID is pre-filled in the Sound Manager's Voice (TTS) generation form.
 
 ## Header Buttons
 

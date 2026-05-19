@@ -231,7 +231,7 @@ const gameSounds = {};
 
 const SOUND_EVENTS = [
   'correct', 'correct-voice', 'wrong', 'wrong-voice', 'buzz', 'daily-double',
-  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over',
+  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over', 'loading',
 ];
 
 async function loadGameSounds() {
@@ -250,15 +250,16 @@ async function loadGameSounds() {
           return audio;
         } catch { return null; }
       }))).filter(Boolean);
-      if (audios.length) gameSounds[event] = audios;
+      if (audios.length) gameSounds[event] = { pool: audios, volume: manifest.volumes?.[event] ?? 1.0 };
     }));
   } catch { /* no manifest — all sounds silent */ }
 }
 
 function playSound(event) {
-  const pool = gameSounds[event];
-  if (!pool?.length) return;
-  const audio = pool[Math.floor(Math.random() * pool.length)];
+  const s = gameSounds[event];
+  if (!s?.pool?.length) return;
+  const audio = s.pool[Math.floor(Math.random() * s.pool.length)];
+  audio.volume = s.volume;
   audio.currentTime = 0;
   audio.play().catch(() => {});
 }
@@ -451,6 +452,7 @@ async function init() {
     loadingScreen.classList.add('fade-out');
     setTimeout(() => loadingScreen.remove(), 400);
 
+    playSound('loading');
     loadAllCategories(1);
     loadGameSounds();
     prefetchCategoryTTS(CATEGORIES);
@@ -1156,6 +1158,7 @@ async function startDoubleJeopardy() {
   assignDailyDoubles();
   stumpedCount = 0;
 
+  playSound('loading');
   loadAllCategories(2);
   categoryTts.clear();
   prefetchCategoryTTS(CATEGORIES);
