@@ -275,7 +275,17 @@
       color: var(--muted);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
+    #delete-unused-btn {
+      font-size: 0.62rem; letter-spacing: 0; text-transform: none;
+      background: none; border: 1px solid #3a1a1a; color: #664;
+      border-radius: 4px; padding: 2px 8px; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    #delete-unused-btn:hover { color: var(--red); border-color: var(--red); }
     #candidates-list {
       overflow-y: auto;
       flex: 1;
@@ -370,6 +380,27 @@
     .icon-btn:hover { color: #fff; border-color: #778; }
     .icon-btn.playing { color: var(--green); border-color: var(--green); }
     .icon-btn.del:hover { color: var(--red); border-color: var(--red); }
+    .icon-btn.del:disabled { color: #2a2a3a; border-color: #1a1a28; cursor: not-allowed; opacity: 0.4; }
+
+    .section-divider {
+      font-size: 0.62rem; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--muted); border-bottom: 1px solid #222244;
+      padding-bottom: 4px; margin: 4px 0 2px;
+    }
+    .section-note {
+      font-size: 0.65rem; color: #446; font-style: italic; margin-bottom: 4px;
+    }
+    .event-slot--looping {
+      border-color: #2a2a5a;
+      background: #0e0e20;
+    }
+    .event-slot--looping .slot-name { color: #88aaff; }
+    .event-slot--looping.drag-over  { border-color: #88aaff; background: #111128; }
+    .loop-badge {
+      font-size: 0.6rem; background: #1a1a40; border: 1px solid #334488;
+      color: #88aaff; border-radius: 3px; padding: 1px 5px; margin-left: 2px;
+      flex-shrink: 0;
+    }
 
     /* ── Events panel ── */
     #events-panel {
@@ -503,7 +534,10 @@
     <div id="pending-section"></div>
 
     <!-- All candidates -->
-    <div class="panel-header">Candidates — drag to assign</div>
+    <div class="panel-header">
+      Candidates — drag to assign
+      <button id="delete-unused-btn" title="Delete all candidates not assigned to any event">Delete unused</button>
+    </div>
     <div id="candidates-list"></div>
 
   </div>
@@ -521,13 +555,19 @@ const EVENTS = [
   { key: 'wrong-voice',     desc: 'Spoken reaction — plays alongside wrong' },
   { key: 'buzz',            desc: 'Human player buzzes in' },
   { key: 'timeout',         desc: 'Buzz window expires with no answer' },
+  { key: 'timeout-voice',   desc: 'Spoken reaction — plays alongside timeout' },
   { key: 'daily-double',    desc: 'Daily Double tile revealed' },
   { key: 'double-jeopardy', desc: 'Double Jeopardy transition' },
   { key: 'final-jeopardy',  desc: 'Final Jeopardy screen opens' },
   { key: 'game-over',       desc: 'Post-game breakdown shown' },
   { key: 'loading',         desc: 'Board is generating (round 1 and round 2)' },
 ];
-const EVENT_KEYS = EVENTS.map(e => e.key);
+
+const LOOPING_EVENTS = [
+  { key: 'bg-music', desc: 'Looping music bed — pauses at Final Jeopardy' },
+  { key: 'bg-sfx',   desc: 'Looping ambient SFX — runs throughout the game' },
+];
+const EVENT_KEYS = [...EVENTS, ...LOOPING_EVENTS].map(e => e.key);
 
 let manifest  = { candidates: {}, active: {} };
 let saveTimer = null;
@@ -672,16 +712,29 @@ function inAnyPool(key) {
   return Object.values(manifest.active).some(pool => pool.includes(key));
 }
 
+async function deleteAllUnused() {
+  const unused = Object.keys(manifest.candidates).filter(k => !inAnyPool(k));
+  if (!unused.length) { alert('No unused candidates.'); return; }
+  if (!confirm(`Permanently delete ${unused.length} unused file${unused.length > 1 ? 's' : ''}?\n\n${unused.join('\n')}`)) return;
+  await Promise.all(unused.map(key => {
+    delete manifest.candidates[key];
+    pendingKeys = pendingKeys.filter(k => k !== key);
+    return fetch(`/api/sounds/candidates/${key}`, { method: 'DELETE' });
+  }));
+  scheduleSave();
+  render();
+}
+
 async function deleteCandidate(key) {
+  const assignedTo = Object.entries(manifest.active)
+    .filter(([, pool]) => pool.includes(key))
+    .map(([event]) => event);
+  if (assignedTo.length) {
+    alert(`"${key}" is assigned to: ${assignedTo.join(', ')}.\nRemove it from those events first.`);
+    return;
+  }
   if (!confirm(`Delete "${key}" permanently?`)) return;
   delete manifest.candidates[key];
-  for (const [event, pool] of Object.entries(manifest.active)) {
-    const f = pool.filter(k => k !== key);
-    if (f.length !== pool.length) {
-      if (f.length === 0) delete manifest.active[event];
-      else manifest.active[event] = f;
-    }
-  }
   pendingKeys = pendingKeys.filter(k => k !== key);
   await fetch(`/api/sounds/candidates/${key}`, { method: 'DELETE' });
   scheduleSave();
@@ -824,7 +877,7 @@ function renderCandidates() {
       </div>
       <div class="card-actions">
         <button class="icon-btn play-btn" title="Preview">▶</button>
-        <button class="icon-btn del" title="Delete">🗑</button>
+        <button class="icon-btn del" title="${used ? 'Remove from event pool first' : 'Delete'}" ${used ? 'disabled' : ''}>🗑</button>
       </div>`;
 
     const playBtn = card.querySelector('.play-btn');
@@ -901,6 +954,76 @@ function renderEvents() {
 
     eventsPanel.appendChild(slot);
   }
+
+  // ── Background / Ambience section ────────────────────────────────────────
+  const divider = document.createElement('div');
+  divider.className = 'section-divider';
+  divider.textContent = 'Background Ambience';
+  eventsPanel.appendChild(divider);
+
+  const note = document.createElement('div');
+  note.className = 'section-note';
+  note.textContent = 'Loops continuously. One track picked at random from the pool at game start. Auto-ducks to silence when the player is listening, then restores.';
+  eventsPanel.appendChild(note);
+
+  for (const { key: event, desc } of LOOPING_EVENTS) {
+    const pool = manifest.active[event] ?? [];
+    const vol  = manifest.volumes?.[event] ?? 1.0;
+    const slot = document.createElement('div');
+    slot.className = 'event-slot event-slot--looping';
+    slot.innerHTML = `
+      <div class="slot-header">
+        <span class="slot-name">${event}</span>
+        <span class="loop-badge">∞ loop</span>
+        <span class="slot-desc">${desc}</span>
+        <label class="slot-vol">
+          vol
+          <input type="range" min="0" max="1" step="0.05" value="${vol}" data-event="${event}">
+          <span class="slot-vol-val">${Math.round(vol * 100)}%</span>
+        </label>
+      </div>
+      <div class="slot-pool">
+        ${pool.length
+          ? pool.map(key => {
+              const c      = manifest.candidates[key] ?? {};
+              const detail = c.type === 'tts' ? c.text : c.type === 'sfx' ? c.prompt : 'imported';
+              return `<div class="pool-chip" data-key="${key}" data-event="${event}">
+                <button class="chip-play" title="Preview">▶</button>
+                <span title="${detail ?? ''}">${key}</span>
+                <button class="chip-remove" title="Remove">✕</button>
+              </div>`;
+            }).join('')
+          : '<span class="slot-empty">Drop a candidate here</span>'}
+      </div>`;
+
+    slot.querySelectorAll('.pool-chip').forEach(chip => {
+      const key = chip.dataset.key, evt = chip.dataset.event;
+      const pb  = chip.querySelector('.chip-play');
+      pb.addEventListener('click', () => playCandidate(key, pb, manifest.volumes?.[event] ?? 1.0));
+      chip.querySelector('.chip-remove').addEventListener('click', () => removeFromPool(evt, key));
+    });
+
+    const volInput = slot.querySelector('input[type=range]');
+    const volVal   = slot.querySelector('.slot-vol-val');
+    volInput.addEventListener('input', () => {
+      const v = parseFloat(volInput.value);
+      volVal.textContent = Math.round(v * 100) + '%';
+      if (!manifest.volumes) manifest.volumes = {};
+      manifest.volumes[event] = v;
+      scheduleSave();
+    });
+
+    slot.addEventListener('dragover',  e => { e.preventDefault(); slot.classList.add('drag-over'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('drag-over');
+      const key = e.dataTransfer.getData('text/plain');
+      if (key) addToPool(event, key);
+    });
+
+    eventsPanel.appendChild(slot);
+  }
 }
 
 // ── Generate form wiring ──────────────────────────────────────────────────────
@@ -922,6 +1045,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 document.getElementById('gen-btn').addEventListener('click', generate);
+document.getElementById('delete-unused-btn').addEventListener('click', deleteAllUnused);
 
 // Pre-fill event name when typing in prompt/text
 function suggestName(src, target) {

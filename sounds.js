@@ -12,7 +12,8 @@ const HOST_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'lQgMO4VKveoqHDCZMAr1';
 
 const KNOWN_EVENTS = [
   'correct', 'correct-voice', 'wrong', 'wrong-voice', 'buzz', 'daily-double',
-  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over', 'loading',
+  'double-jeopardy', 'final-jeopardy', 'timeout', 'timeout-voice', 'game-over', 'loading',
+  'bg-music', 'bg-sfx',
 ];
 
 // ── Manifest ──────────────────────────────────────────────────────────────────

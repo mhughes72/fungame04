@@ -231,8 +231,11 @@ const gameSounds = {};
 
 const SOUND_EVENTS = [
   'correct', 'correct-voice', 'wrong', 'wrong-voice', 'buzz', 'daily-double',
-  'double-jeopardy', 'final-jeopardy', 'timeout', 'game-over', 'loading',
+  'double-jeopardy', 'final-jeopardy', 'timeout', 'timeout-voice', 'game-over', 'loading',
+  'bg-music', 'bg-sfx',
 ];
+
+const LOOPING_EVENTS = ['bg-music', 'bg-sfx'];
 
 async function loadGameSounds() {
   try {
@@ -250,7 +253,17 @@ async function loadGameSounds() {
           return audio;
         } catch { return null; }
       }))).filter(Boolean);
-      if (audios.length) gameSounds[event] = { pool: audios, volume: manifest.volumes?.[event] ?? 1.0 };
+      if (!audios.length) return;
+      const volume = manifest.volumes?.[event] ?? 1.0;
+      if (LOOPING_EVENTS.includes(event)) {
+        const chosen = audios[Math.floor(Math.random() * audios.length)];
+        chosen.loop   = true;
+        chosen.volume = volume;
+        chosen.play().catch(() => {});
+        gameSounds[event] = { pool: audios, volume, current: chosen };
+      } else {
+        gameSounds[event] = { pool: audios, volume };
+      }
     }));
   } catch { /* no manifest — all sounds silent */ }
 }
@@ -264,25 +277,63 @@ function playSound(event) {
   audio.play().catch(() => {});
 }
 
+// Fade all looping ambience channels to/from a target volume
+function fadeAmbience(getEndVol, durationMs) {
+  const entries = LOOPING_EVENTS.map(ev => ({
+    audio: gameSounds[ev]?.current,
+    start: gameSounds[ev]?.current?.volume ?? 0,
+    end:   getEndVol(ev),
+  })).filter(e => e.audio && Math.abs(e.start - e.end) > 0.001);
+  if (!entries.length) return;
+  const t0 = performance.now();
+  function step(now) {
+    const t = Math.min((now - t0) / durationMs, 1);
+    entries.forEach(e => { e.audio.volume = e.start + (e.end - e.start) * t; });
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function duckAmbience()    { fadeAmbience(() => 0, 250); }
+function restoreAmbience() { fadeAmbience(ev => gameSounds[ev]?.volume ?? 1, 500); }
+
+// Fade out bg-music and pause it (used at Final Jeopardy — keep bg-sfx running)
+function pauseBgMusic() {
+  const s = gameSounds['bg-music'];
+  if (!s?.current) return;
+  fadeAmbience(ev => ev === 'bg-music' ? 0 : (gameSounds[ev]?.volume ?? 1), 800);
+  setTimeout(() => { if (gameSounds['bg-music']?.current) gameSounds['bg-music'].current.pause(); }, 850);
+}
+
 // ── Category TTS (host reads category name) ───────────────────────────────────
-const categoryTts = new Map(); // category name → HTMLAudioElement
+const categoryTts = new Map(); // category name → { pool: Audio[], idx: number }
+const CATEGORY_TTS_VARIANTS = 5;
 
 async function prefetchCategoryTTS(categories) {
   await Promise.all(categories.map(async name => {
     try {
-      const res = await fetch(`/api/tts?text=${encodeURIComponent(name)}`);
-      if (!res.ok) return;
-      const blob  = await res.blob();
-      const audio = new Audio(URL.createObjectURL(blob));
-      audio.volume = 0.9;
-      categoryTts.set(name, audio);
+      const blobs = await Promise.all(
+        Array.from({ length: CATEGORY_TTS_VARIANTS }, () =>
+          fetch(`/api/tts?text=${encodeURIComponent(name)}`)
+            .then(r => r.ok ? r.blob() : null)
+            .catch(() => null)
+        )
+      );
+      const pool = blobs.filter(Boolean).map(blob => {
+        const audio = new Audio(URL.createObjectURL(blob));
+        audio.volume = 0.9;
+        return audio;
+      });
+      if (pool.length) categoryTts.set(name, { pool, idx: 0 });
     } catch { /* non-critical */ }
   }));
 }
 
 function playCategoryTTS(name) {
-  const audio = categoryTts.get(name);
-  if (!audio) return;
+  const entry = categoryTts.get(name);
+  if (!entry) return;
+  const audio = entry.pool[entry.idx % entry.pool.length];
+  entry.idx++;
   audio.currentTime = 0;
   audio.play().catch(() => {});
 }
@@ -665,7 +716,9 @@ function startBuzzTimer() {
     if (!clueOpen) return;
     clueOpen = false;
     cancelAITimers();
+    restoreAmbience();
     playSound('timeout');
+    playSound('timeout-voice');
     clueExpired();
   }, duration);
 }
@@ -939,6 +992,7 @@ buzzBtn.addEventListener('click', () => {
   clearBuzzTimer();
   animateCard(0, 'buzz');
   playSound('buzz');
+  duckAmbience();
   startListening();
 });
 
@@ -975,6 +1029,7 @@ function showClarification(originalAnswer, value) {
 }
 
 function startClarifyListening(value) {
+  duckAmbience();
   startSpeechRecognition({
     seconds:     4,
     ringEl:      clarifyRingProgress,
@@ -994,6 +1049,7 @@ async function submitClarifiedAnswer(spokenText, value) {
 
 // ── Result ──
 function showResult(playerIdx, correct, message, correctAnswer, value) {
+  restoreAmbience();
   const { ci, vi } = activeCell;
   attemptedPlayers.add(playerIdx);
   animateCard(playerIdx, correct ? 'correct' : 'wrong');
@@ -1203,6 +1259,7 @@ async function startFinalJeopardy() {
   fjWagers  = new Array(PLAYERS.length).fill(0);
   fjAnswers = new Array(PLAYERS.length).fill('');
 
+  pauseBgMusic();
   playSound('final-jeopardy');
   hostLookup('final_jeopardy');
   document.getElementById('fj-screen').classList.remove('hidden');
@@ -1384,6 +1441,7 @@ async function showFJClue() {
   const statusEl     = document.getElementById('fj-clue-status');
   const transcriptEl = document.getElementById('fj-clue-transcript');
   const humanIdx     = PLAYERS.findIndex(p => p.isHuman);
+  duckAmbience();
   const recognition  = startFJRecognition(statusEl, transcriptEl);
 
   startFJTimer(FINAL_JEOPARDY_MS, document.getElementById('fj-timer-bar'), document.getElementById('fj-timer-num'));
